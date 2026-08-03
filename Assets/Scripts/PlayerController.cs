@@ -12,6 +12,11 @@ public class PlayerController : MonoBehaviour
 
     public MapManager mapManager;
 
+    [Header("Check Obstacles")]
+    public LayerMask obstacleLayer;
+    public float obstacleCheckHeight = 0.5f;
+    public float obstacleCheckRadius = 0.3f;
+
     private bool isMoving;
     private Queue<Vector3> moveQueue = new Queue<Vector3>();
 
@@ -59,6 +64,27 @@ public class PlayerController : MonoBehaviour
         if (futurePosition.x < minX ||
             futurePosition.x > maxX)
         {
+            return;
+        }
+
+        // Check the destination tile for obstacles
+        Vector3 checkPosition =
+            futurePosition + Vector3.up * 0.75f;
+
+        Vector3 halfExtents =
+            new Vector3(0.4f, 0.75f, 0.4f);
+
+        bool obstacleFound = Physics.CheckBox(
+            checkPosition,
+            halfExtents,
+            Quaternion.identity,
+            obstacleLayer,
+            QueryTriggerInteraction.Collide
+        );
+
+        if (obstacleFound)
+        {
+            Debug.Log("Movement blocked by obstacle");
             return;
         }
 
@@ -140,6 +166,15 @@ public class PlayerController : MonoBehaviour
         if (transform.position.z <= backRowZ + 0.01f)
         {
             GameManager.Instance.GameOver();
+        }
+    }
+
+    void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Collectible"))
+        {
+            Destroy(other.gameObject);
+            Debug.Log("Collected!");
         }
     }
 }
