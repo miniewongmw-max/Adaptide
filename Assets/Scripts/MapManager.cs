@@ -35,7 +35,31 @@ public class MapManager : MonoBehaviour
 
     void Start()
     {
+        ConfigureDifficulty();
         GenerateStartingMap();
+    }
+
+    void ConfigureDifficulty()
+    {
+        int stage = Mathf.Clamp(GameSession.SelectedStage, 0, 2);
+        switch (GameSession.Mode)
+        {
+            case FishGameMode.Tutorial:
+                obstacleSpawnChance = 0.28f + stage * 0.04f;
+                maximumObstaclesPerRow = 2;
+                collectibleSpawnChance = 0.24f;
+                break;
+            case FishGameMode.TimeAttack:
+                obstacleSpawnChance = 0.48f + stage * 0.06f;
+                maximumObstaclesPerRow = 4 + stage;
+                collectibleSpawnChance = 0.20f;
+                break;
+            default:
+                obstacleSpawnChance = 0.38f + stage * 0.07f;
+                maximumObstaclesPerRow = 3 + stage;
+                collectibleSpawnChance = 0.18f;
+                break;
+        }
     }
 
     void Update()
@@ -164,8 +188,9 @@ public class MapManager : MonoBehaviour
             return;
         }
 
-        int obstacleCount =
-        Random.Range(0, maximumObstaclesPerRow + 1);
+        if (Random.value > obstacleSpawnChance) return;
+
+        int obstacleCount = Random.Range(1, maximumObstaclesPerRow + 1);
 
         List<int> availableXPositions =
             new List<int>();
@@ -195,7 +220,30 @@ public class MapManager : MonoBehaviour
 
             obstacle.transform.localPosition =
                 new Vector3(xPosition, obstacleHeight, 0f);
+
+            SeaObstacle behaviour = obstacle.GetComponent<SeaObstacle>();
+            if (behaviour == null) behaviour = obstacle.AddComponent<SeaObstacle>();
+            behaviour.Initialize(RandomObstacleType());
         }
+    }
+
+    SeaObstacleType RandomObstacleType()
+    {
+        float roll = Random.value;
+        if (GameSession.Mode == FishGameMode.Tutorial)
+        {
+            if (roll < 0.30f) return SeaObstacleType.Squid;
+            if (roll < 0.55f) return SeaObstacleType.Jellyfish;
+            if (roll < 0.78f) return SeaObstacleType.Crab;
+            return SeaObstacleType.Pufferfish;
+        }
+
+        float sharkChance = GameSession.SelectedStage == 2 ? 0.20f : 0.10f;
+        if (roll < sharkChance) return SeaObstacleType.Shark;
+        if (roll < 0.30f) return SeaObstacleType.Squid;
+        if (roll < 0.52f) return SeaObstacleType.Crab;
+        if (roll < 0.75f) return SeaObstacleType.Jellyfish;
+        return SeaObstacleType.Pufferfish;
     }
 
     void RefreshObstacles(Transform row)
@@ -203,16 +251,17 @@ public class MapManager : MonoBehaviour
         Transform obstacleContainer =
             row.Find("Obstacles");
 
-        if (obstacleContainer == null)
+        if (obstacleContainer != null)
         {
-            return;
+            obstacleContainer.name = "Obstacles_Old";
+            obstacleContainer.SetParent(null);
+            obstacleContainer.gameObject.SetActive(false);
+            Destroy(obstacleContainer.gameObject);
         }
 
-        // Remove obstacles from the row's previous use
-        foreach (Transform obstacle in obstacleContainer)
-        {
-            Destroy(obstacle.gameObject);
-        }
+        GameObject replacement = new GameObject("Obstacles");
+        replacement.transform.SetParent(row);
+        replacement.transform.localPosition = Vector3.zero;
 
         SpawnObstacles(row);
     }
@@ -233,8 +282,17 @@ public class MapManager : MonoBehaviour
             return;
         }
 
+        HashSet<int> occupied = new HashSet<int>();
+        Transform obstacles = row.Find("Obstacles");
+        if (obstacles != null)
+            foreach (Transform obstacle in obstacles)
+                occupied.Add(Mathf.RoundToInt(obstacle.localPosition.x));
+
+        List<int> freeLanes = new List<int>();
         for (int x = -4; x <= 4; x++)
         {
+            if (occupied.Contains(x)) continue;
+            freeLanes.Add(x);
             if (Random.value > collectibleSpawnChance)
             {
                 continue;
@@ -242,23 +300,6 @@ public class MapManager : MonoBehaviour
 
             Vector3 localPosition =
                 new Vector3(x, collectibleHeight, 0f);
-
-            Vector3 worldPosition =
-                row.TransformPoint(localPosition);
-
-            // Do not spawn on an obstacle
-            bool obstacleFound = Physics.CheckBox(
-                worldPosition + Vector3.up * 0.5f,
-                new Vector3(0.4f, 0.5f, 0.4f),
-                Quaternion.identity,
-                obstacleLayer,
-                QueryTriggerInteraction.Collide
-            );
-
-            if (obstacleFound)
-            {
-                continue;
-            }
 
             int randomIndex =
                 Random.Range(0, collectiblePrefabs.Count);
@@ -269,7 +310,42 @@ public class MapManager : MonoBehaviour
             );
 
             collectible.transform.localPosition = localPosition;
+            CollectibleItem item = collectible.GetComponent<CollectibleItem>();
+            if (item == null) item = collectible.AddComponent<CollectibleItem>();
+            item.kind = CollectibleKind.Pearl;
         }
+
+        if (freeLanes.Count > 0)
+        {
+            float bonusRoll = Random.value;
+            if (bonusRoll < 0.025f) CreateBonusCollectible(collectibleContainer, freeLanes, CollectibleKind.TreasureChest);
+            else if (bonusRoll < 0.09f) CreateBonusCollectible(collectibleContainer, freeLanes, CollectibleKind.Starfish);
+            else if (bonusRoll < 0.115f) CreateBonusCollectible(collectibleContainer, freeLanes, (CollectibleKind)Random.Range(3, 7));
+        }
+    }
+
+    void CreateBonusCollectible(Transform container, List<int> freeLanes, CollectibleKind kind)
+    {
+        int lane = freeLanes[Random.Range(0, freeLanes.Count)];
+        GameObject root = new GameObject(kind.ToString());
+        root.transform.SetParent(container);
+        root.transform.localPosition = new Vector3(lane, collectibleHeight + 0.2f, 0f);
+        SphereCollider trigger = root.AddComponent<SphereCollider>();
+        trigger.isTrigger = true;
+        trigger.radius = 0.48f;
+        CollectibleItem item = root.AddComponent<CollectibleItem>();
+        item.kind = kind;
+
+        PrimitiveType shape = kind == CollectibleKind.TreasureChest ? PrimitiveType.Cube : PrimitiveType.Sphere;
+        GameObject visual = GameObject.CreatePrimitive(shape);
+        visual.transform.SetParent(root.transform, false);
+        visual.transform.localScale = kind == CollectibleKind.Starfish ? new Vector3(0.8f, 0.15f, 0.8f) :
+            kind == CollectibleKind.TreasureChest ? new Vector3(0.8f, 0.55f, 0.55f) : Vector3.one * 0.65f;
+        Collider visualCollider = visual.GetComponent<Collider>();
+        if (visualCollider != null) Destroy(visualCollider);
+        Color color = kind == CollectibleKind.Starfish ? new Color32(255, 143, 83, 255) :
+            kind == CollectibleKind.TreasureChest ? new Color32(255, 206, 92, 255) : new Color32(91, 235, 218, 255);
+        visual.GetComponent<Renderer>().material.color = color;
     }
 
     void RefreshCollectibles(Transform row)
@@ -277,15 +353,17 @@ public class MapManager : MonoBehaviour
         Transform collectibleContainer =
             row.Find("Collectibles");
 
-        if (collectibleContainer == null)
+        if (collectibleContainer != null)
         {
-            return;
+            collectibleContainer.name = "Collectibles_Old";
+            collectibleContainer.SetParent(null);
+            collectibleContainer.gameObject.SetActive(false);
+            Destroy(collectibleContainer.gameObject);
         }
 
-        foreach (Transform collectible in collectibleContainer)
-        {
-            Destroy(collectible.gameObject);
-        }
+        GameObject replacement = new GameObject("Collectibles");
+        replacement.transform.SetParent(row);
+        replacement.transform.localPosition = Vector3.zero;
 
         SpawnCollectibles(row);
     }

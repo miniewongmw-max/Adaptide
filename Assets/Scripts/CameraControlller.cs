@@ -14,11 +14,14 @@ public class CameraController : MonoBehaviour
 
     private float currentSpeed;
     private Camera cameraComponent;
+    private bool lastPortrait;
 
     void Start()
     {
+        ConfigureForMode();
         currentSpeed = minimumSpeed;
         cameraComponent = GetComponent<Camera>();
+        ApplyOrientation();
 
         if (player != null)
         {
@@ -27,8 +30,39 @@ public class CameraController : MonoBehaviour
         }
     }
 
+    void ConfigureForMode()
+    {
+        float stageBoost = Mathf.Clamp(GameSession.SelectedStage, 0, 2) * 0.12f;
+        switch (GameSession.Mode)
+        {
+            case FishGameMode.Tutorial:
+                minimumSpeed = 0.45f + stageBoost;
+                catchUpSpeed = 2.1f;
+                break;
+            case FishGameMode.TimeAttack:
+                minimumSpeed = 1.0f + stageBoost;
+                catchUpSpeed = 3.8f;
+                break;
+            default:
+                minimumSpeed = 0.72f + stageBoost;
+                catchUpSpeed = 3.0f;
+                break;
+        }
+    }
+
+    void ApplyOrientation()
+    {
+        if (cameraComponent == null) return;
+        lastPortrait = Screen.height > Screen.width;
+        cameraComponent.fieldOfView = lastPortrait ? 67f : 55f;
+    }
+
     void Update()
 {
+    if (lastPortrait != (Screen.height > Screen.width))
+    {
+        ApplyOrientation();
+    }
     if (GameManager.Instance == null)
     {
         return;
@@ -46,7 +80,7 @@ public class CameraController : MonoBehaviour
     }
 
         Vector3 playerViewportPosition =
-            Camera.main.WorldToViewportPoint(player.position);
+            cameraComponent.WorldToViewportPoint(player.position);
 
         float targetSpeed = minimumSpeed;
 
