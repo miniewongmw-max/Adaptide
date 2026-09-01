@@ -198,13 +198,16 @@ public static class OceanUI
 
     public static void EnsureEventSystem()
     {
-        if (EventSystem.current != null) return;
+        if (EventSystem.current != null ||
+            UnityEngine.Object.FindObjectsByType<EventSystem>(FindObjectsInactive.Include).Length > 0) return;
         GameObject go = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-        UnityEngine.Object.DontDestroyOnLoad(go);
+        if (Application.isPlaying) UnityEngine.Object.DontDestroyOnLoad(go);
     }
 
     private static TMP_FontAsset CreamyFont()
     {
+        if (creamyFont != null) return creamyFont;
+        creamyFont = Resources.Load<TMP_FontAsset>("Fonts/Creamy Chicken SDF");
         if (creamyFont != null) return creamyFont;
         Font source = Resources.Load<Font>("Fonts/Creamy Chicken");
         if (source == null) return null;

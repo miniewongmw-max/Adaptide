@@ -13,6 +13,7 @@ public enum SeaObstacleType
 public class SeaObstacle : MonoBehaviour
 {
     public SeaObstacleType type;
+    private float nextMovingHitTime;
 
     public void Initialize(SeaObstacleType newType)
     {
@@ -72,5 +73,17 @@ public class SeaObstacle : MonoBehaviour
             default:
                 return true;
         }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        // Traffic can move in the ready-state preview, but it must never damage
+        // the player or put the game into Game Over before the first tap.
+        if (GameManager.Instance == null || !GameManager.Instance.gameStarted || GameManager.Instance.gameOver) return;
+        if (GetComponent<MovingSeaObstacle>() == null || Time.time < nextMovingHitTime) return;
+        PlayerController hitPlayer = other.GetComponentInParent<PlayerController>();
+        if (hitPlayer == null) return;
+        nextMovingHitTime = Time.time + 0.75f;
+        Interact(hitPlayer);
     }
 }

@@ -11,10 +11,14 @@ public class MapManager : MonoBehaviour
     public int width = 9;
     public int length = 20;
 
-    // Player 后面先生成多少排
+   
     public int rowsBehindPlayer = 5;
 
     public float recycleDistance = 5f;
+
+    [Header("Starting Safe Zone")]
+    [Min(1)] public int safeRowsAheadOfStart = 6;
+    [Min(0)] public int pearlRowsAheadOfStart = 2;
 
     private List<Transform> rows = new List<Transform>();
 
@@ -50,15 +54,41 @@ public class MapManager : MonoBehaviour
     [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
     public List<GameObject> obstaclePrefabs;
     [Range(0f, 1f)]
-    public float obstacleSpawnChance = 0.3f;
+    public float obstacleSpawnChance = 0.1f;
     public float obstacleHeight = 0.5f;
     public int maximumObstaclesPerRow = 4;
     public LayerMask obstacleLayer;
+    [Header("Crossing Traffic Lanes")]
+    [Min(8f)] public float animalOffscreenDistance = 12f;
+
+    [Header("Traffic Tuning - Editable In Inspector")]
+    [Tooltip("Minimum and maximum movement speed of Squid, Jellyfish, Pufferfish and Shark. X = Min, Y = Max.")]
+    public Vector2 animalSpeedRange = new Vector2(0.7f, 1.5f);
+
+    [Tooltip("Seconds between animals in the same wave. X = Min, Y = Max. Larger values spawn animals less frequently.")]
+    public Vector2 animalSpawnIntervalRange = new Vector2(3.5f, 5.5f);
+
+    [Tooltip("How many animals appear before the lane takes a longer break. X = Min, Y = Max.")]
+    public Vector2Int animalsPerWaveRange = new Vector2Int(1, 2);
+
+    [Tooltip("Pause between traffic waves. X = Min, Y = Max. Larger values give the player a longer crossing window.")]
+    public Vector2 animalWavePauseRange = new Vector2(4.0f, 6.0f);
+
+    [Tooltip("Extra speed multiplier used only in Time Attack mode. 1 = same speed as normal mode.")]
+    [Range(1f, 2f)]
+    public float timeAttackAnimalSpeedMultiplier = 1.15f;
+    [Range(3, 5)] public int minimumMovingRowsBeforeCoral = 1;
+    [Range(3, 5)] public int maximumMovingRowsBeforeCoral = 5;
     private int pearlPatternLane;
     private int pearlPatternRemaining;
     private int pearlPatternDirection = 1;
     private int pearlPatternCooldown;
     private int tutorialObstacleIndex;
+    private int movingRowsUntilCoral;
+    private SeaObstacleType lastTrafficType = SeaObstacleType.Coral;
+    private float startingPlayerZ;
+
+    public float StartingSafeMaxZ => startingPlayerZ + safeRowsAheadOfStart;
 
     void Start()
     {
@@ -68,6 +98,7 @@ public class MapManager : MonoBehaviour
 
     void ConfigureDifficulty()
     {
+        movingRowsUntilCoral = Random.Range(minimumMovingRowsBeforeCoral, maximumMovingRowsBeforeCoral + 1);
         int stage = Mathf.Clamp(GameSession.SelectedStage, 0, 2);
         switch (GameSession.Mode)
         {
@@ -97,6 +128,8 @@ public class MapManager : MonoBehaviour
     void GenerateStartingMap()
     {
         int halfWidth = width / 2;
+        PlayerController startingPlayer = FindAnyObjectByType<PlayerController>();
+        startingPlayerZ = startingPlayer != null ? Mathf.Round(startingPlayer.transform.position.z) : 0f;
 
         // 地图不再从 Z = 0 开始
         // 例如 rowsBehindPlayer = 5，就从 Z = -5 开始
@@ -148,10 +181,13 @@ public class MapManager : MonoBehaviour
             collectibleContainer.transform.SetParent(rowObject.transform);
             collectibleContainer.transform.localPosition = Vector3.zero;
 
-            if (GameSession.Mode != FishGameMode.Tutorial && i >= 10)
+            if (GameSession.Mode != FishGameMode.Tutorial)
             {
-                SpawnObstacles(rowObject.transform);
-                SpawnCollectibles(rowObject.transform);
+                // Use world position rather than the loop index. The scene can
+                // override rowsBehindPlayer, and index-based spawning previously
+                // put the first traffic lane directly on the player's Z row.
+                if (rowZ > StartingSafeMaxZ) SpawnObstacles(rowObject.transform);
+                if (rowZ >= startingPlayerZ + pearlRowsAheadOfStart) SpawnCollectibles(rowObject.transform);
             }
 
             rows.Add(rowObject.transform);
@@ -331,56 +367,81 @@ public class MapManager : MonoBehaviour
             return;
         }
 
-        if (Random.value > obstacleSpawnChance) return;
-
-        int obstacleCount = Random.Range(1, maximumObstaclesPerRow + 1);
-
-        List<int> availableXPositions =
-            new List<int>();
-
-        for (int x = -4; x <= 4; x++)
+        if (movingRowsUntilCoral <= 0)
         {
-            availableXPositions.Add(x);
+            SpawnCoralRestRow(obstacleContainer);
+            movingRowsUntilCoral = Random.Range(minimumMovingRowsBeforeCoral, maximumMovingRowsBeforeCoral + 1);
+            return;
         }
 
-        for (int i = 0; i < obstacleCount; i++)
+        SpawnAnimalTrafficRow(obstacleContainer);
+        movingRowsUntilCoral--;
+    }
+
+    private void SpawnAnimalTrafficRow(Transform obstacleContainer)
+    {
+        SeaObstacleType type = RandomMovingAnimalType();
+        GameObject prefab = GetObstaclePrefab(type);
+        if (prefab == null) return;
+        int direction = Random.value < 0.5f ? -1 : 1;
+        float modeSpeed = GameSession.Mode == FishGameMode.TimeAttack
+            ? timeAttackAnimalSpeedMultiplier
+            : 1f;
+
+        float minSpeed = Mathf.Max(0.05f, Mathf.Min(animalSpeedRange.x, animalSpeedRange.y));
+        float maxSpeed = Mathf.Max(minSpeed, Mathf.Max(animalSpeedRange.x, animalSpeedRange.y));
+        float speed = Random.Range(minSpeed, maxSpeed) * modeSpeed;
+        float interval = Random.Range(animalSpawnIntervalRange.x, animalSpawnIntervalRange.y);
+        int waveSize = Random.Range(animalsPerWaveRange.x, animalsPerWaveRange.y + 1);
+        float wavePause = Random.Range(animalWavePauseRange.x, animalWavePauseRange.y);
+        AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
+        lane.Configure(prefab, type, direction, speed, interval, animalOffscreenDistance,
+            obstacleHeight, GetNamedObstaclePrefab(type) == null, waveSize, wavePause);
+    }
+
+    private void SpawnCoralRestRow(Transform obstacleContainer)
+    {
+        // Rest rows use only stationary obstacles. Crab behaves like coral here:
+        // it occupies a fixed tile and never receives MovingSeaObstacle/traffic-lane movement.
+        SeaObstacleType staticType = Random.value < 0.70f
+            ? SeaObstacleType.Coral
+            : SeaObstacleType.Crab;
+
+        int obstacleCount = staticType == SeaObstacleType.Crab
+            ? 1
+            : Random.Range(1, 3);
+
+        List<int> lanes = new List<int>();
+        for (int x = -4; x <= 4; x++) lanes.Add(x);
+
+        for (int i = 0; i < obstacleCount && lanes.Count > 0; i++)
         {
-            int positionIndex =
-                Random.Range(0, availableXPositions.Count);
-
-            int xPosition =
-                availableXPositions[positionIndex];
-
-            availableXPositions.RemoveAt(positionIndex);
-
-            SeaObstacleType type = RandomObstacleType();
-            GameObject obstacle = SpawnObstaclePrefab(type, obstacleContainer);
-            if (obstacle == null) continue;
-
-            obstacle.transform.localPosition =
-                new Vector3(xPosition, obstacleHeight, 0f);
+            int choice = Random.Range(0, lanes.Count);
+            GameObject obstacle = SpawnObstaclePrefab(staticType, obstacleContainer);
+            if (obstacle != null)
+                obstacle.transform.localPosition = new Vector3(lanes[choice], obstacleHeight, 0f);
+            lanes.RemoveAt(choice);
         }
     }
 
-    SeaObstacleType RandomObstacleType()
+    private SeaObstacleType RandomMovingAnimalType()
     {
-        float roll = Random.value;
-        if (GameSession.Mode == FishGameMode.Tutorial)
-        {
-            if (roll < 0.28f) return SeaObstacleType.Coral;
-            if (roll < 0.48f) return SeaObstacleType.Squid;
-            if (roll < 0.68f) return SeaObstacleType.Jellyfish;
-            if (roll < 0.84f) return SeaObstacleType.Crab;
-            return SeaObstacleType.Pufferfish;
-        }
+        SeaObstacleType selected = WeightedMovingAnimalType();
+        for (int attempt = 0; selected == lastTrafficType && attempt < 4; attempt++)
+            selected = WeightedMovingAnimalType();
+        lastTrafficType = selected;
+        return selected;
+    }
 
-        float sharkChance = GameSession.SelectedStage == 2 ? 0.20f : 0.10f;
-        if (roll < sharkChance) return SeaObstacleType.Shark;
-        if (roll < sharkChance + 0.25f) return SeaObstacleType.Coral;
-        if (roll < 0.45f) return SeaObstacleType.Squid;
-        if (roll < 0.62f) return SeaObstacleType.Crab;
-        if (roll < 0.80f) return SeaObstacleType.Jellyfish;
-        return SeaObstacleType.Pufferfish;
+    private static SeaObstacleType WeightedMovingAnimalType()
+    {
+        // Crab is intentionally excluded: it is now a stationary tile obstacle,
+        // spawned on the same kind of rest rows as coral.
+        float roll = Random.value;
+        if (roll < 0.30f) return SeaObstacleType.Squid;
+        if (roll < 0.60f) return SeaObstacleType.Jellyfish;
+        if (roll < 0.85f) return SeaObstacleType.Pufferfish;
+        return SeaObstacleType.Shark;
     }
 
     void RefreshObstacles(Transform row)

@@ -20,6 +20,9 @@ public class GameManager : MonoBehaviour
     public Transform player;
     public Camera mainCamera;
     public TMP_Text tapToStartText;
+    [Range(0.05f, 0.24f)]
+    [Tooltip("Lose when the visible character centre retreats below this height, measured from the bottom.")]
+    public float retreatLossScreenY = 0.17f;
 
     private PlayerController playerController;
     private TMP_Text scoreText;
@@ -47,6 +50,7 @@ public class GameManager : MonoBehaviour
     private float invincibleUntil;
     private int crabStep = -1;
     private SeaObstacle crabObstacle;
+    private float crabSafeUntil;
     private Coroutine statusRoutine;
     private MainMenuBehaviour gameplayHub;
     private bool runPrepared;
@@ -75,7 +79,7 @@ public class GameManager : MonoBehaviour
         playerController = player != null ? player.GetComponent<PlayerController>() : FindAnyObjectByType<PlayerController>();
         if (player == null && playerController != null) player = playerController.transform;
         if (mainCamera == null) mainCamera = Camera.main;
-        BuildGameplayUI();
+        BindGameplayUI();
         ApplyStageAtmosphere();
         UpdateHud();
         gameplayHub = gameObject.AddComponent<MainMenuBehaviour>();
@@ -117,15 +121,18 @@ public class GameManager : MonoBehaviour
         pearlChip = pearlPanel.gameObject;
         OceanUI.SetRect(pearlPanel.rectTransform, new Vector2(0.025f, 0.90f), new Vector2(0.30f, 0.975f), Vector2.zero, Vector2.zero);
         pearlText = OceanUI.CreateText("PEARL  0", pearlPanel.transform, 36f, OceanUI.Sand, TextAlignmentOptions.Left);
+        pearlText.name = "Pearl Text";
         pearlChip.SetActive(false);
 
         Image scoreChip = OceanUI.CreatePanel("Score", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
         OceanUI.SetRect(scoreChip.rectTransform, new Vector2(0.70f, 0.90f), new Vector2(0.975f, 0.975f), Vector2.zero, Vector2.zero);
         scoreText = OceanUI.CreateText("0", scoreChip.transform, 50f, OceanUI.Foam, TextAlignmentOptions.Right);
+        scoreText.name = "Score Text";
         bestScoreText = OceanUI.CreateText("BEST  0", root, 25f, OceanUI.Sand, TextAlignmentOptions.Right);
         bestScoreText.name = "Best Score";
         OceanUI.SetRect(bestScoreText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
         timerText = OceanUI.CreateText("", root, 28f, OceanUI.Coral, TextAlignmentOptions.Right);
+        timerText.name = "Timer Text";
         OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.81f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
 
         pauseButton = OceanUI.CreateButton("Pause", "PAUSE", root, OceanUI.Panel, TogglePause);
@@ -134,17 +141,20 @@ public class GameManager : MonoBehaviour
         pauseButton.gameObject.SetActive(false);
 
         powerText = OceanUI.CreateText("", root, 24f, OceanUI.Foam, TextAlignmentOptions.Left);
+        powerText.name = "Power Text";
         OceanUI.SetRect(powerText.rectTransform, new Vector2(0.03f, 0.84f), new Vector2(0.65f, 0.895f), Vector2.zero, Vector2.zero);
 
         BuildDpad(root, adaptive);
 
         statusText = OceanUI.CreateText("", root, 37f, OceanUI.Sand);
+        statusText.name = "Status Text";
         OceanUI.SetRect(statusText.rectTransform, new Vector2(0.10f, 0.63f), new Vector2(0.90f, 0.74f), Vector2.zero, Vector2.zero);
 
         Image objective = OceanUI.CreatePanel("Tutorial Objective", root, new Color(0.02f, 0.20f, 0.29f, 0.90f));
         tutorialObjectivePanel = objective.gameObject;
         OceanUI.SetRect(objective.rectTransform, new Vector2(0.12f, 0.70f), new Vector2(0.88f, 0.79f), Vector2.zero, Vector2.zero);
         tutorialObjectiveText = OceanUI.CreateText("", objective.transform, 28f, OceanUI.Sand);
+        tutorialObjectiveText.name = "Tutorial Objective Text";
         tutorialObjectivePanel.SetActive(false);
 
         // Ink deliberately ignores the safe area so the effect covers the whole
@@ -157,14 +167,112 @@ public class GameManager : MonoBehaviour
         pauseOverlay = BuildModal(root, "CURRENT PAUSED", "Take a breath. Your turtle is safe here.", "RESUME", TogglePause);
         AddModalSecondaryButton(pauseOverlay.transform, "BOTTOM MENU", GoToMenu);
         pauseOverlay.SetActive(false);
-        gameOverOverlay = BuildResultOverlay(root);
+        gameOverOverlay = BuildResultOverlay(canvas);
         gameOverOverlay.SetActive(false);
         tutorialCompleteOverlay = BuildModal(root, "TUTORIAL COMPLETE", "You mastered movement, pearls, obstacles and every buff. You are ready for the reef!", "BACK", GoToMenu);
         tutorialCompleteOverlay.SetActive(false);
 
         crabText = OceanUI.CreateText("", root, 43f, OceanUI.Foam);
+        crabText.name = "Crab Escape Text";
         OceanUI.SetRect(crabText.rectTransform, new Vector2(0.08f, 0.37f), new Vector2(0.92f, 0.62f), Vector2.zero, Vector2.zero);
         crabText.gameObject.SetActive(false);
+    }
+
+    // Used only by the editor baker. Runtime binds to this saved Canvas instead
+    // of creating UI objects, so artists can replace images and add frames freely.
+    public void BuildGameplayUIForEditor()
+    {
+        playerController = player != null ? player.GetComponent<PlayerController>() : FindAnyObjectByType<PlayerController>();
+        BuildGameplayUI();
+    }
+
+    private void BindGameplayUI()
+    {
+        Canvas canvas = FindSceneCanvas("Busy Reef Gameplay HUD");
+        if (canvas == null)
+        {
+            Debug.LogError("Gameplay Canvas is missing. Run Tools/Busy Reef/Bake Editable Gameplay Canvas.");
+            return;
+        }
+
+        canvas.gameObject.SetActive(true);
+        Transform root = FindDeepChild(canvas.transform, "SafeArea");
+        if (root == null) root = canvas.transform;
+
+        pearlChip = FindDeepChild(root, "Pearls")?.gameObject;
+        pearlText = ComponentAt<TMP_Text>(root, "Pearl Text");
+        scoreText = ComponentAt<TMP_Text>(root, "Score Text");
+        bestScoreText = ComponentAt<TMP_Text>(root, "Best Score");
+        timerText = ComponentAt<TMP_Text>(root, "Timer Text");
+        powerText = ComponentAt<TMP_Text>(root, "Power Text");
+        statusText = ComponentAt<TMP_Text>(root, "Status Text");
+        tutorialObjectivePanel = FindDeepChild(root, "Tutorial Objective")?.gameObject;
+        tutorialObjectiveText = ComponentAt<TMP_Text>(root, "Tutorial Objective Text");
+        pauseButton = ComponentAt<Button>(root, "Pause");
+        pauseOverlay = FindDeepChild(root, "CURRENT PAUSED")?.gameObject;
+        gameOverOverlay = FindDeepChild(canvas.transform, "Dive Result")?.gameObject;
+        tutorialCompleteOverlay = FindDeepChild(root, "TUTORIAL COMPLETE")?.gameObject;
+        resultText = ComponentAt<TMP_Text>(canvas.transform, "Result Text");
+        crabText = ComponentAt<TMP_Text>(root, "Crab Escape Text");
+        inkCloud = ComponentAt<Image>(canvas.transform, "Ink Cloud");
+
+        GameplayGestureInput gestures = ComponentAt<GameplayGestureInput>(root, "Swipe Surface");
+        if (gestures != null) gestures.player = playerController;
+        foreach (TouchMoveButton move in root.GetComponentsInChildren<TouchMoveButton>(true)) move.player = playerController;
+        Transform dpad = FindDeepChild(root, "Touch Direction Pad");
+        if (dpad != null) dpad.gameObject.SetActive(GameSession.ShowTouchControls);
+
+        WireButton(pauseButton, TogglePause);
+        WireButton(ComponentAt<Button>(pauseOverlay != null ? pauseOverlay.transform : null, "Primary"), TogglePause);
+        WireButton(ComponentAt<Button>(pauseOverlay != null ? pauseOverlay.transform : null, "Secondary"), GoToMenu);
+        WireButton(ComponentAt<Button>(gameOverOverlay != null ? gameOverOverlay.transform : null, "Retry"), Restart);
+        WireButton(ComponentAt<Button>(gameOverOverlay != null ? gameOverOverlay.transform : null, "Hub"), GoToMenu);
+        WireButton(ComponentAt<Button>(tutorialCompleteOverlay != null ? tutorialCompleteOverlay.transform : null, "Primary"), GoToMenu);
+
+        SetActive(pearlChip, false);
+        if (pauseButton != null) pauseButton.gameObject.SetActive(false);
+        SetActive(tutorialObjectivePanel, false);
+        if (inkCloud != null) inkCloud.gameObject.SetActive(false);
+        SetActive(pauseOverlay, false);
+        SetActive(gameOverOverlay, false);
+        SetActive(tutorialCompleteOverlay, false);
+        if (crabText != null) crabText.gameObject.SetActive(false);
+    }
+
+    private static Canvas FindSceneCanvas(string objectName)
+    {
+        foreach (Canvas canvas in FindObjectsByType<Canvas>(FindObjectsInactive.Include))
+            if (canvas.name == objectName) return canvas;
+        return null;
+    }
+
+    private static Transform FindDeepChild(Transform root, string objectName)
+    {
+        if (root == null) return null;
+        if (root.name == objectName) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            Transform found = FindDeepChild(root.GetChild(i), objectName);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static T ComponentAt<T>(Transform root, string objectName) where T : Component
+    {
+        return FindDeepChild(root, objectName)?.GetComponent<T>();
+    }
+
+    private static void WireButton(Button button, UnityEngine.Events.UnityAction action)
+    {
+        if (button == null) return;
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(action);
+    }
+
+    private static void SetActive(GameObject target, bool value)
+    {
+        if (target != null) target.SetActive(value);
     }
 
     private void BuildDpad(RectTransform root, AdaptiveUILayout adaptive)
@@ -183,17 +291,25 @@ public class GameManager : MonoBehaviour
         center.raycastTarget = false;
     }
 
-    private GameObject BuildResultOverlay(RectTransform root)
+    private GameObject BuildResultOverlay(Canvas canvas)
     {
-        GameObject overlay = OceanUI.CreateObject("Dive Result", root);
+        // The dim layer is outside the safe area so it covers curved edges,
+        // notches and the entire physical display. Interactive content stays
+        // inside its own safe-area container.
+        GameObject overlay = OceanUI.CreateObject("Dive Result", canvas.transform);
         OceanUI.Stretch(overlay.GetComponent<RectTransform>(), 0f);
         Image dim = overlay.AddComponent<Image>();
         dim.color = new Color(0.01f, 0.08f, 0.13f, 0.58f);
-        resultText = OceanUI.CreateText("", overlay.transform, 54f, OceanUI.Foam);
+        GameObject safeObject = OceanUI.CreateObject("Result SafeArea", overlay.transform);
+        RectTransform content = safeObject.GetComponent<RectTransform>();
+        OceanUI.Stretch(content, 0f);
+        safeObject.AddComponent<SafeAreaPanel>();
+        resultText = OceanUI.CreateText("", content, 54f, OceanUI.Foam);
+        resultText.name = "Result Text";
         OceanUI.SetRect(resultText.rectTransform, new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.72f), Vector2.zero, Vector2.zero);
-        Button retry = OceanUI.CreateButton("Retry", "RETRY", overlay.transform, OceanUI.Sand, Restart);
+        Button retry = OceanUI.CreateButton("Retry", "RETRY", content, OceanUI.Sand, Restart);
         OceanUI.SetRect(retry.GetComponent<RectTransform>(), new Vector2(0.25f, 0.12f), new Vector2(0.75f, 0.22f), Vector2.zero, Vector2.zero);
-        Button hub = OceanUI.CreateButton("Hub", "BOTTOM MENU", overlay.transform, OceanUI.Panel, GoToMenu);
+        Button hub = OceanUI.CreateButton("Hub", "BOTTOM MENU", content, OceanUI.Panel, GoToMenu);
         OceanUI.SetRect(hub.GetComponent<RectTransform>(), new Vector2(0.34f, 0.045f), new Vector2(0.66f, 0.105f), Vector2.zero, Vector2.zero);
         hub.GetComponentInChildren<TMP_Text>().fontSize = 24f;
         return overlay;
@@ -244,7 +360,7 @@ public class GameManager : MonoBehaviour
             FishGameMode.TimeAttack => "TIME ATTACK | 60 seconds\nMove forward quickly. Pearls are currency; starfish add bonus score.",
             _ => "STANDARD | Endless reef\nSurvive, travel farther, collect pearls and beat your best score."
         };
-        return $"{GameSession.StageNames[Mathf.Clamp(GameSession.SelectedStage, 0, 2)]}\n\n{mode}";
+        return mode;
     }
 
     private void ApplyStageAtmosphere()
@@ -561,7 +677,7 @@ public class GameManager : MonoBehaviour
 
     public void BeginCrabEscape(PlayerController trappedPlayer, SeaObstacle obstacle)
     {
-        if (crabStep >= 0) return;
+        if (crabStep >= 0 || Time.time < crabSafeUntil) return;
         crabStep = 0;
         crabObstacle = obstacle;
         trappedPlayer.SetInputLocked(true);
@@ -579,6 +695,7 @@ public class GameManager : MonoBehaviour
         if (crabStep >= 3)
         {
             crabStep = -1;
+            crabSafeUntil = Time.time + 4f;
             crabText.gameObject.SetActive(false);
             playerController?.SetInputLocked(false);
             if (crabObstacle != null) Destroy(crabObstacle.gameObject);
@@ -627,15 +744,26 @@ public class GameManager : MonoBehaviour
     private void CheckPlayerOutsideCamera()
     {
         if (player == null || mainCamera == null) return;
-        Vector3 viewport = mainCamera.WorldToViewportPoint(player.position);
-        if (viewport.y < -0.03f) GameOver("Left behind by the current");
+        Vector3 visibleCenter = player.position;
+        Renderer[] renderers = player.GetComponentsInChildren<Renderer>(true);
+        bool hasBounds = false;
+        Bounds bounds = default;
+        foreach (Renderer renderer in renderers)
+        {
+            if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+            if (!hasBounds) { bounds = renderer.bounds; hasBounds = true; }
+            else bounds.Encapsulate(renderer.bounds);
+        }
+        if (hasBounds) visibleCenter = bounds.center;
+        Vector3 viewport = mainCamera.WorldToViewportPoint(visibleCenter);
+        if (viewport.y < retreatLossScreenY) GameOver("Left behind by the current");
     }
 
     public void GameOver() => GameOver("The reef got too busy");
 
     public void GameOver(string reason)
     {
-        if (gameOver) return;
+        if (gameOver || !gameStarted) return;
         gameOver = true;
         gameStarted = false;
         if (pauseButton != null) pauseButton.gameObject.SetActive(false);

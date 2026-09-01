@@ -26,11 +26,13 @@ public class PlayerController : MonoBehaviour
     private float stunnedUntil;
     private float nextMagnetScan;
     private float furthestScoredZ;
+    private CameraController cameraController;
     private readonly Queue<Vector3> moveQueue = new Queue<Vector3>();
 
     private void Start()
     {
         furthestScoredZ = transform.position.z;
+        cameraController = FindAnyObjectByType<CameraController>();
         RefreshCharacter();
     }
 
@@ -119,6 +121,7 @@ public class PlayerController : MonoBehaviour
             }
             transform.position = target;
             GameManager.Instance?.NotifyPlayerMoved(direction);
+            cameraController?.NotifyPlayerMoved(direction);
             if (direction.z > 0f && transform.position.z > furthestScoredZ + 0.01f)
             {
                 int newlyReachedRows = Mathf.Max(1, Mathf.RoundToInt((transform.position.z - furthestScoredZ) / tileSize));
