@@ -6,6 +6,11 @@ using UnityEngine.UI;
 
 public static class OceanUI
 {
+    private const string CanvasPrefabPath = "UI/BusyReefCanvas";
+    private const string PanelPrefabPath = "UI/BusyReefPanel";
+    private const string TextPrefabPath = "UI/BusyReefText";
+    private const string ButtonPrefabPath = "UI/BusyReefButton";
+
     public static readonly Color Deep = new Color32(3, 31, 56, 255);
     public static readonly Color Navy = new Color32(4, 52, 79, 245);
     public static readonly Color Panel = new Color32(7, 79, 103, 232);
@@ -27,7 +32,14 @@ public static class OceanUI
         }
 
         EnsureEventSystem();
-        GameObject go = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        GameObject canvasPrefab = Resources.Load<GameObject>(CanvasPrefabPath);
+        GameObject go = canvasPrefab != null
+            ? UnityEngine.Object.Instantiate(canvasPrefab)
+            : new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        go.name = name;
+        if (go.GetComponent<Canvas>() == null) go.AddComponent<Canvas>();
+        if (go.GetComponent<CanvasScaler>() == null) go.AddComponent<CanvasScaler>();
+        if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();
         Canvas canvasResult = go.GetComponent<Canvas>();
         canvasResult.renderMode = RenderMode.ScreenSpaceOverlay;
         canvasResult.sortingOrder = 50;
@@ -38,13 +50,18 @@ public static class OceanUI
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.matchWidthOrHeight = 0.5f;
 
-        GameObject safe = CreateObject("SafeArea", go.transform);
+        Transform existingSafe = go.transform.Find("SafeArea");
+        GameObject safe = existingSafe != null ? existingSafe.gameObject : CreateObject("SafeArea", go.transform);
         Stretch(safe.GetComponent<RectTransform>(), 0f);
-        safe.AddComponent<SafeAreaPanel>();
+        if (safe.GetComponent<SafeAreaPanel>() == null) safe.AddComponent<SafeAreaPanel>();
         return canvasResult;
     }
 
-    public static RectTransform SafeRoot(Canvas canvas) => canvas.transform.GetChild(0) as RectTransform;
+    public static RectTransform SafeRoot(Canvas canvas)
+    {
+        Transform safe = canvas.transform.Find("SafeArea");
+        return safe != null ? safe as RectTransform : canvas.transform.GetChild(0) as RectTransform;
+    }
 
     public static GameObject CreateObject(string name, Transform parent)
     {
@@ -55,19 +72,32 @@ public static class OceanUI
 
     public static Image CreatePanel(string name, Transform parent, Color color)
     {
-        GameObject go = CreateObject(name, parent);
-        Image image = go.AddComponent<Image>();
+        GameObject panelPrefab = Resources.Load<GameObject>(PanelPrefabPath);
+        GameObject go = panelPrefab != null
+            ? UnityEngine.Object.Instantiate(panelPrefab, parent, false)
+            : CreateObject(name, parent);
+        go.name = name;
+        Image image = go.GetComponent<Image>();
+        if (image == null) image = go.AddComponent<Image>();
         image.color = color;
-        image.sprite = RoundedSprite();
-        image.type = Image.Type.Sliced;
+        if (image.sprite == null)
+        {
+            image.sprite = RoundedSprite();
+            image.type = Image.Type.Sliced;
+        }
         return image;
     }
 
     public static TMP_Text CreateText(string text, Transform parent, float size, Color color,
         TextAlignmentOptions alignment = TextAlignmentOptions.Center)
     {
-        GameObject go = CreateObject("Text", parent);
-        TMP_Text label = go.AddComponent<TextMeshProUGUI>();
+        GameObject textPrefab = Resources.Load<GameObject>(TextPrefabPath);
+        GameObject go = textPrefab != null
+            ? UnityEngine.Object.Instantiate(textPrefab, parent, false)
+            : CreateObject("Text", parent);
+        go.name = "Text";
+        TMP_Text label = go.GetComponent<TMP_Text>();
+        if (label == null) label = go.AddComponent<TextMeshProUGUI>();
         label.text = text;
         label.fontSize = size;
         label.color = color;
@@ -82,16 +112,39 @@ public static class OceanUI
 
     public static Button CreateButton(string name, string label, Transform parent, Color color, Action onClick)
     {
-        Image image = CreatePanel(name, parent, color);
-        Button button = image.gameObject.AddComponent<Button>();
+        GameObject buttonPrefab = Resources.Load<GameObject>(ButtonPrefabPath);
+        GameObject go = buttonPrefab != null
+            ? UnityEngine.Object.Instantiate(buttonPrefab, parent, false)
+            : CreatePanel(name, parent, color).gameObject;
+        go.name = name;
+        Image image = go.GetComponent<Image>();
+        if (image == null) image = go.AddComponent<Image>();
+        image.color = color;
+        if (image.sprite == null)
+        {
+            image.sprite = RoundedSprite();
+            image.type = Image.Type.Sliced;
+        }
+        Button button = go.GetComponent<Button>();
+        if (button == null) button = go.AddComponent<Button>();
         ColorBlock colors = button.colors;
         colors.normalColor = Color.white;
         colors.highlightedColor = new Color(1.08f, 1.08f, 1.08f, 1f);
         colors.pressedColor = new Color(0.72f, 0.9f, 0.9f, 1f);
         colors.selectedColor = Color.white;
         button.colors = colors;
+        button.onClick.RemoveAllListeners();
         if (onClick != null) button.onClick.AddListener(() => onClick());
-        CreateText(label, image.transform, 40f, Deep);
+        TMP_Text buttonLabel = go.GetComponentInChildren<TMP_Text>(true);
+        if (buttonLabel == null) buttonLabel = CreateText(label, image.transform, 40f, Deep);
+        buttonLabel.text = label;
+        buttonLabel.fontSize = 40f;
+        buttonLabel.color = Deep;
+        buttonLabel.alignment = TextAlignmentOptions.Center;
+        buttonLabel.raycastTarget = false;
+        TMP_FontAsset font = CreamyFont();
+        if (font != null) buttonLabel.font = font;
+        Stretch(buttonLabel.rectTransform, 12f);
         return button;
     }
 

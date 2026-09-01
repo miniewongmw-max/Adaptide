@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 public class MapManager : MonoBehaviour
 {
+    [Header("World Prefabs")]
     public GameObject tilePrefab;
     public GameObject borderTilePrefab;
     public Transform cameraTransform;
@@ -19,13 +20,34 @@ public class MapManager : MonoBehaviour
 
     private float nextRowZ;
 
-    [Header("Collectibles")]
+    [Header("Collectible Prefabs")]
+    [Tooltip("Normal pearl currency prefab.")]
+    public GameObject pearlPrefab;
+    public GameObject starfishPrefab;
+    public GameObject treasureChestPrefab;
+
+    [Header("Buff Prefabs")]
+    public GameObject bubbleShieldPrefab;
+    public GameObject speedDashPrefab;
+    public GameObject pearlMagnetPrefab;
+    public GameObject invincibilityBubblePrefab;
+
+    [Header("Animal And Obstacle Prefabs")]
+    public GameObject coralPrefab;
+    public GameObject squidPrefab;
+    public GameObject crabPrefab;
+    public GameObject jellyfishPrefab;
+    public GameObject pufferfishPrefab;
+    public GameObject sharkPrefab;
+
+    [Header("Legacy Prefab Fallbacks")]
+    [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
     public List<GameObject> collectiblePrefabs;
     [Range(0f, 1f)]
     public float collectibleSpawnChance = 0.15f;
     public float collectibleHeight = 0.5f;
 
-    [Header("Obstacles")]
+    [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
     public List<GameObject> obstaclePrefabs;
     [Range(0f, 1f)]
     public float obstacleSpawnChance = 0.3f;
@@ -126,11 +148,7 @@ public class MapManager : MonoBehaviour
             collectibleContainer.transform.SetParent(rowObject.transform);
             collectibleContainer.transform.localPosition = Vector3.zero;
 
-            if (GameSession.Mode == FishGameMode.Tutorial)
-            {
-                SpawnTutorialRow(rowObject.transform, i);
-            }
-            else if (i >= 10)
+            if (GameSession.Mode != FishGameMode.Tutorial && i >= 10)
             {
                 SpawnObstacles(rowObject.transform);
                 SpawnCollectibles(rowObject.transform);
@@ -143,6 +161,83 @@ public class MapManager : MonoBehaviour
         // 下一排接在目前地图最前面
         nextRowZ = startingZ + length;
 
+    }
+
+    public void ClearTutorialContent()
+    {
+        foreach (Transform row in rows)
+        {
+            if (row == null) continue;
+            ClearContainer(row.Find("Obstacles"));
+            ClearContainer(row.Find("Collectibles"));
+        }
+    }
+
+    private void ClearContainer(Transform container)
+    {
+        if (container == null) return;
+        foreach (Transform child in container)
+        {
+            child.gameObject.SetActive(false);
+            Destroy(child.gameObject);
+        }
+    }
+
+    public void SpawnTutorialPearlTrail(float startZ, int lane, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            Transform row = FindRow(startZ + i);
+            Transform container = row != null ? row.Find("Collectibles") : null;
+            if (container != null) SpawnPearl(container, Mathf.Clamp(lane, -4, 4));
+        }
+    }
+
+    public void SpawnTutorialPearlPattern(float startZ, int centerLane, int count)
+    {
+        int pearlCount = Mathf.Max(1, count);
+        for (int i = 0; i < pearlCount; i++)
+        {
+            int rowIndex = i / 2;
+            int firstLane = Mathf.Clamp(centerLane + (rowIndex % 2 == 0 ? -1 : 0), -4, 4);
+            int secondLane = Mathf.Clamp(centerLane + (rowIndex % 2 == 0 ? 1 : 2), -4, 4);
+            if (secondLane == firstLane)
+                secondLane = firstLane == 4 ? firstLane - 1 : firstLane + 1;
+            int lane = i % 2 == 0 ? firstLane : secondLane;
+            Transform row = FindRow(startZ + rowIndex);
+            Transform container = row != null ? row.Find("Collectibles") : null;
+            if (container != null) SpawnPearl(container, lane);
+        }
+    }
+
+    public void SpawnTutorialPowerUp(CollectibleKind kind, float z, int lane)
+    {
+        Transform row = FindRow(z);
+        Transform container = row != null ? row.Find("Collectibles") : null;
+        if (container == null) return;
+        CreateBonusCollectible(container, new List<int> { Mathf.Clamp(lane, -4, 4) }, kind);
+    }
+
+    public void SpawnTutorialObstacle(SeaObstacleType type, float z, int lane)
+    {
+        Transform row = FindRow(z);
+        Transform container = row != null ? row.Find("Obstacles") : null;
+        if (container == null) return;
+        GameObject obstacle = SpawnObstaclePrefab(type, container);
+        if (obstacle == null) return;
+        obstacle.transform.localPosition = new Vector3(Mathf.Clamp(lane, -4, 4), obstacleHeight, 0f);
+    }
+
+    public void SpawnTutorialObstacleLine(SeaObstacleType type, float z)
+    {
+        for (int lane = -4; lane <= 4; lane++) SpawnTutorialObstacle(type, z, lane);
+    }
+
+    private Transform FindRow(float z)
+    {
+        foreach (Transform row in rows)
+            if (row != null && Mathf.Abs(row.position.z - Mathf.Round(z)) < 0.1f) return row;
+        return null;
     }
 
     public void ResetForSelectedRun()
@@ -181,14 +276,12 @@ public class MapManager : MonoBehaviour
 
     void SpawnTutorialObstacle(Transform row, int lane)
     {
-        if (obstaclePrefabs == null || obstaclePrefabs.Count == 0) return;
         Transform container = row.Find("Obstacles");
-        GameObject obstacle = Instantiate(obstaclePrefabs[tutorialObstacleIndex % obstaclePrefabs.Count], container);
-        obstacle.transform.localPosition = new Vector3(lane, obstacleHeight, 0f);
-        SeaObstacle behaviour = obstacle.GetComponent<SeaObstacle>();
-        if (behaviour == null) behaviour = obstacle.AddComponent<SeaObstacle>();
         SeaObstacleType[] lessons = { SeaObstacleType.Coral, SeaObstacleType.Squid, SeaObstacleType.Jellyfish, SeaObstacleType.Crab };
-        behaviour.Initialize(lessons[tutorialObstacleIndex % lessons.Length]);
+        SeaObstacleType type = lessons[tutorialObstacleIndex % lessons.Length];
+        GameObject obstacle = SpawnObstaclePrefab(type, container);
+        if (obstacle == null) return;
+        obstacle.transform.localPosition = new Vector3(lane, obstacleHeight, 0f);
         tutorialObstacleIndex++;
     }
 
@@ -230,12 +323,6 @@ public class MapManager : MonoBehaviour
 
     void SpawnObstacles(Transform row)
     {
-        if (obstaclePrefabs == null ||
-            obstaclePrefabs.Count == 0)
-        {
-            return;
-        }
-
         Transform obstacleContainer =
             row.Find("Obstacles");
 
@@ -266,20 +353,12 @@ public class MapManager : MonoBehaviour
 
             availableXPositions.RemoveAt(positionIndex);
 
-            int prefabIndex =
-                Random.Range(0, obstaclePrefabs.Count);
-
-            GameObject obstacle = Instantiate(
-                obstaclePrefabs[prefabIndex],
-                obstacleContainer
-            );
+            SeaObstacleType type = RandomObstacleType();
+            GameObject obstacle = SpawnObstaclePrefab(type, obstacleContainer);
+            if (obstacle == null) continue;
 
             obstacle.transform.localPosition =
                 new Vector3(xPosition, obstacleHeight, 0f);
-
-            SeaObstacle behaviour = obstacle.GetComponent<SeaObstacle>();
-            if (behaviour == null) behaviour = obstacle.AddComponent<SeaObstacle>();
-            behaviour.Initialize(RandomObstacleType());
         }
     }
 
@@ -321,17 +400,11 @@ public class MapManager : MonoBehaviour
         replacement.transform.SetParent(row);
         replacement.transform.localPosition = Vector3.zero;
 
-        SpawnObstacles(row);
+        if (GameSession.Mode != FishGameMode.Tutorial) SpawnObstacles(row);
     }
 
     void SpawnCollectibles(Transform row)
     {
-        if (collectiblePrefabs == null ||
-            collectiblePrefabs.Count == 0)
-        {
-            return;
-        }
-
         Transform collectibleContainer =
             row.Find("Collectibles");
 
@@ -396,35 +469,94 @@ public class MapManager : MonoBehaviour
 
     void SpawnPearl(Transform container, int lane)
     {
-        GameObject collectible = Instantiate(collectiblePrefabs[Random.Range(0, collectiblePrefabs.Count)], container);
-        collectible.transform.localPosition = new Vector3(lane, collectibleHeight, 0f);
-        CollectibleItem item = collectible.GetComponent<CollectibleItem>();
-        if (item == null) item = collectible.AddComponent<CollectibleItem>();
-        item.kind = CollectibleKind.Pearl;
+        SpawnCollectiblePrefab(CollectibleKind.Pearl, container, lane, collectibleHeight);
     }
 
     void CreateBonusCollectible(Transform container, List<int> freeLanes, CollectibleKind kind)
     {
         int lane = freeLanes[Random.Range(0, freeLanes.Count)];
-        GameObject root = new GameObject(kind.ToString());
-        root.transform.SetParent(container);
-        root.transform.localPosition = new Vector3(lane, collectibleHeight + 0.2f, 0f);
-        SphereCollider trigger = root.AddComponent<SphereCollider>();
-        trigger.isTrigger = true;
-        trigger.radius = 0.48f;
-        CollectibleItem item = root.AddComponent<CollectibleItem>();
-        item.kind = kind;
+        SpawnCollectiblePrefab(kind, container, lane, collectibleHeight + 0.2f);
+    }
 
-        PrimitiveType shape = kind == CollectibleKind.TreasureChest ? PrimitiveType.Cube : PrimitiveType.Sphere;
-        GameObject visual = GameObject.CreatePrimitive(shape);
-        visual.transform.SetParent(root.transform, false);
-        visual.transform.localScale = kind == CollectibleKind.Starfish ? new Vector3(0.8f, 0.15f, 0.8f) :
-            kind == CollectibleKind.TreasureChest ? new Vector3(0.8f, 0.55f, 0.55f) : Vector3.one * 0.65f;
-        Collider visualCollider = visual.GetComponent<Collider>();
-        if (visualCollider != null) Destroy(visualCollider);
-        Color color = kind == CollectibleKind.Starfish ? new Color32(255, 143, 83, 255) :
-            kind == CollectibleKind.TreasureChest ? new Color32(255, 206, 92, 255) : new Color32(91, 235, 218, 255);
-        visual.GetComponent<Renderer>().material.color = color;
+    private GameObject SpawnObstaclePrefab(SeaObstacleType type, Transform container)
+    {
+        GameObject prefab = GetObstaclePrefab(type);
+        if (prefab == null) return null;
+        GameObject obstacle = Instantiate(prefab, container);
+        obstacle.name = type.ToString();
+        SeaObstacle behaviour = obstacle.GetComponent<SeaObstacle>();
+        if (behaviour == null) behaviour = obstacle.AddComponent<SeaObstacle>();
+        // Final named art keeps its authored materials. The old generic fallback
+        // block is tinted so the game remains readable until all slots are filled.
+        behaviour.Initialize(type, GetNamedObstaclePrefab(type) == null);
+        bool hasSolidCollider = false;
+        foreach (Collider collider in obstacle.GetComponentsInChildren<Collider>(true))
+            if (!collider.isTrigger) hasSolidCollider = true;
+        if (!hasSolidCollider)
+            obstacle.AddComponent<BoxCollider>();
+        return obstacle;
+    }
+
+    private GameObject GetObstaclePrefab(SeaObstacleType type)
+    {
+        GameObject named = GetNamedObstaclePrefab(type);
+        if (named != null) return named;
+        if (obstaclePrefabs == null || obstaclePrefabs.Count == 0) return null;
+        return obstaclePrefabs[(int)type % obstaclePrefabs.Count];
+    }
+
+    private GameObject GetNamedObstaclePrefab(SeaObstacleType type)
+    {
+        return type switch
+        {
+            SeaObstacleType.Coral => coralPrefab,
+            SeaObstacleType.Squid => squidPrefab,
+            SeaObstacleType.Crab => crabPrefab,
+            SeaObstacleType.Jellyfish => jellyfishPrefab,
+            SeaObstacleType.Pufferfish => pufferfishPrefab,
+            SeaObstacleType.Shark => sharkPrefab,
+            _ => null
+        };
+    }
+
+    private GameObject SpawnCollectiblePrefab(CollectibleKind kind, Transform container, int lane, float height)
+    {
+        GameObject prefab = GetCollectiblePrefab(kind);
+        if (prefab == null) return null;
+        GameObject collectible = Instantiate(prefab, container);
+        collectible.name = kind.ToString();
+        collectible.transform.localPosition = new Vector3(lane, height, 0f);
+        CollectibleItem item = collectible.GetComponent<CollectibleItem>();
+        if (item == null) item = collectible.AddComponent<CollectibleItem>();
+        item.kind = kind;
+        bool hasTrigger = false;
+        foreach (Collider collider in collectible.GetComponentsInChildren<Collider>(true))
+            if (collider.isTrigger) hasTrigger = true;
+        if (!hasTrigger)
+        {
+            SphereCollider trigger = collectible.AddComponent<SphereCollider>();
+            trigger.isTrigger = true;
+            trigger.radius = 0.48f;
+        }
+        return collectible;
+    }
+
+    private GameObject GetCollectiblePrefab(CollectibleKind kind)
+    {
+        GameObject named = kind switch
+        {
+            CollectibleKind.Pearl => pearlPrefab,
+            CollectibleKind.Starfish => starfishPrefab,
+            CollectibleKind.TreasureChest => treasureChestPrefab,
+            CollectibleKind.BubbleShield => bubbleShieldPrefab,
+            CollectibleKind.SpeedDash => speedDashPrefab,
+            CollectibleKind.PearlMagnet => pearlMagnetPrefab,
+            CollectibleKind.InvincibilityBubble => invincibilityBubblePrefab,
+            _ => null
+        };
+        if (named != null) return named;
+        if (collectiblePrefabs == null || collectiblePrefabs.Count == 0) return null;
+        return collectiblePrefabs[Random.Range(0, collectiblePrefabs.Count)];
     }
 
     void RefreshCollectibles(Transform row)
@@ -444,7 +576,7 @@ public class MapManager : MonoBehaviour
         replacement.transform.SetParent(row);
         replacement.transform.localPosition = Vector3.zero;
 
-        SpawnCollectibles(row);
+        if (GameSession.Mode != FishGameMode.Tutorial) SpawnCollectibles(row);
     }
 
 }

@@ -15,6 +15,7 @@ public class MainMenuBehaviour : MonoBehaviour
     private TMP_Text shopWalletText, homeText, stageTitle, stageDescription, feedback, characterFeedback, touchLabel;
     private GameObject powerShop, characterShop;
     private StageCarousel3D carousel;
+    private Button stagePrevious, stageNext;
     private Coroutine slideRoutine;
     private int currentPage = 2;
     private RectTransform navigationBar;
@@ -145,10 +146,10 @@ public class MainMenuBehaviour : MonoBehaviour
             GameManager.Instance?.PreviewSelectedStage();
             RefreshAll();
         };
-        Button prev = OceanUI.CreateButton("Previous", "<", page, OceanUI.Panel, carousel.Previous);
-        Button next = OceanUI.CreateButton("Next", ">", page, OceanUI.Panel, carousel.Next);
-        OceanUI.SetRect(prev.GetComponent<RectTransform>(), new Vector2(.02f, .47f), new Vector2(.14f, .61f), Vector2.zero, Vector2.zero);
-        OceanUI.SetRect(next.GetComponent<RectTransform>(), new Vector2(.86f, .47f), new Vector2(.98f, .61f), Vector2.zero, Vector2.zero);
+        stagePrevious = OceanUI.CreateButton("Previous", "<", page, OceanUI.Panel, carousel.Previous);
+        stageNext = OceanUI.CreateButton("Next", ">", page, OceanUI.Panel, carousel.Next);
+        OceanUI.SetRect(stagePrevious.GetComponent<RectTransform>(), new Vector2(.02f, .47f), new Vector2(.14f, .61f), Vector2.zero, Vector2.zero);
+        OceanUI.SetRect(stageNext.GetComponent<RectTransform>(), new Vector2(.86f, .47f), new Vector2(.98f, .61f), Vector2.zero, Vector2.zero);
         stageTitle = OceanUI.CreateText("", page, 31f, OceanUI.Foam);
         stageDescription = OceanUI.CreateText("", page, 23f, OceanUI.Muted);
         OceanUI.SetRect(stageTitle.rectTransform, new Vector2(.08f, .27f), new Vector2(.92f, .35f), Vector2.zero, Vector2.zero);
@@ -164,6 +165,7 @@ public class MainMenuBehaviour : MonoBehaviour
         Button b = OceanUI.CreateButton(label, label, parent, color, () =>
         {
             GameSession.Mode = mode;
+            if (mode == FishGameMode.Tutorial) GameSession.SelectedStage = 0;
             GameManager.Instance?.PreviewSelectedStage();
             RefreshAll();
         });
@@ -449,6 +451,9 @@ public class MainMenuBehaviour : MonoBehaviour
             stageTitle.text = GameSession.StageNames[i].ToUpperInvariant() + "  |  " + GameSession.Mode.ToString().ToUpperInvariant();
             stageDescription.text = GameSession.StageDescriptions[i];
         }
+        carousel?.SetTutorialLocked(GameSession.Mode == FishGameMode.Tutorial);
+        if (stagePrevious != null) stagePrevious.gameObject.SetActive(GameSession.Mode != FishGameMode.Tutorial);
+        if (stageNext != null) stageNext.gameObject.SetActive(GameSession.Mode != FishGameMode.Tutorial);
     }
 
     public void SetShopMenu() => Navigate(1);

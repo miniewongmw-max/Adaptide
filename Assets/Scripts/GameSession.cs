@@ -54,6 +54,11 @@ public static class GameSession
     public static void BeginRun()
     {
         RunPearls = 0;
+        if (Mode == FishGameMode.Tutorial)
+        {
+            ShieldReady = SpeedDashReady = PearlMagnetReady = InvincibilityReady = false;
+            return;
+        }
         ShieldReady = ConsumePowerUp(0);
         SpeedDashReady = ConsumePowerUp(1);
         PearlMagnetReady = ConsumePowerUp(2);

@@ -6,6 +6,13 @@ using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
+    private const int TutorialMagnetPearlGoal = 8;
+
+    private enum TutorialLesson
+    {
+        Movement, Pearls, Coral, Squid, Jellyfish, Pufferfish, Crab, Shark,
+        BubbleShield, SpeedDash, PearlMagnet, Invincibility, Complete
+    }
     public static GameManager Instance;
 
     public bool gameStarted;
@@ -16,22 +23,26 @@ public class GameManager : MonoBehaviour
 
     private PlayerController playerController;
     private TMP_Text scoreText;
+    private TMP_Text bestScoreText;
     private TMP_Text pearlText;
     private TMP_Text timerText;
     private TMP_Text statusText;
     private TMP_Text powerText;
     private TMP_Text crabText;
+    private TMP_Text tutorialObjectiveText;
     private Image inkCloud;
     private GameObject pauseOverlay;
     private GameObject gameOverOverlay;
+    private GameObject tutorialCompleteOverlay;
     private Button pauseButton;
     private GameObject pearlChip;
+    private GameObject tutorialObjectivePanel;
     private TMP_Text resultText;
     private float remainingTime = 60f;
     private int score;
     private bool paused;
     private bool shieldReady;
-    private float speedDashUntil;
+    private bool speedDashReady;
     private float magnetUntil;
     private float invincibleUntil;
     private int crabStep = -1;
@@ -41,10 +52,15 @@ public class GameManager : MonoBehaviour
     private bool runPrepared;
     private int tutorialForwardMoves;
     private bool tutorialSideMove;
-    private bool tutorialBuffSeen;
-    private int tutorialObstaclesSeen;
+    private int tutorialPearls;
+    private float tutorialTargetZ;
+    private MapManager tutorialMap;
+    private TutorialLesson tutorialLesson;
+    private bool tutorialPowerCollected;
+    private int tutorialDashForwardMoves;
+    private float tutorialDashStartZ;
 
-    public bool HasSpeedDash => gameStarted && Time.time < speedDashUntil;
+    public bool HasSpeedDash => gameStarted && speedDashReady;
     public bool HasPearlMagnet => gameStarted && Time.time < magnetUntil;
     public bool IsInvincible => gameStarted && Time.time < invincibleUntil;
 
@@ -61,11 +77,10 @@ public class GameManager : MonoBehaviour
         if (mainCamera == null) mainCamera = Camera.main;
         BuildGameplayUI();
         ApplyStageAtmosphere();
-        GameSession.BeginRun();
-        shieldReady = GameSession.ShieldReady;
         UpdateHud();
         gameplayHub = gameObject.AddComponent<MainMenuBehaviour>();
         gameplayHub.BuildOnGameplay();
+        FindAnyObjectByType<CameraController>()?.PrepareForSelectedRun();
     }
 
     private void Update()
@@ -107,12 +122,15 @@ public class GameManager : MonoBehaviour
         Image scoreChip = OceanUI.CreatePanel("Score", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
         OceanUI.SetRect(scoreChip.rectTransform, new Vector2(0.70f, 0.90f), new Vector2(0.975f, 0.975f), Vector2.zero, Vector2.zero);
         scoreText = OceanUI.CreateText("0", scoreChip.transform, 50f, OceanUI.Foam, TextAlignmentOptions.Right);
+        bestScoreText = OceanUI.CreateText("BEST  0", root, 25f, OceanUI.Sand, TextAlignmentOptions.Right);
+        bestScoreText.name = "Best Score";
+        OceanUI.SetRect(bestScoreText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
         timerText = OceanUI.CreateText("", root, 28f, OceanUI.Coral, TextAlignmentOptions.Right);
-        OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
+        OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.81f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
 
         pauseButton = OceanUI.CreateButton("Pause", "PAUSE", root, OceanUI.Panel, TogglePause);
         pauseButton.GetComponentInChildren<TMP_Text>().fontSize = 22f;
-        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.835f, 0.79f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
+        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.835f, 0.74f), new Vector2(0.975f, 0.81f), Vector2.zero, Vector2.zero);
         pauseButton.gameObject.SetActive(false);
 
         powerText = OceanUI.CreateText("", root, 24f, OceanUI.Foam, TextAlignmentOptions.Left);
@@ -123,7 +141,15 @@ public class GameManager : MonoBehaviour
         statusText = OceanUI.CreateText("", root, 37f, OceanUI.Sand);
         OceanUI.SetRect(statusText.rectTransform, new Vector2(0.10f, 0.63f), new Vector2(0.90f, 0.74f), Vector2.zero, Vector2.zero);
 
-        inkCloud = OceanUI.CreatePanel("Ink Cloud", root, new Color(0.03f, 0.01f, 0.08f, 0.88f));
+        Image objective = OceanUI.CreatePanel("Tutorial Objective", root, new Color(0.02f, 0.20f, 0.29f, 0.90f));
+        tutorialObjectivePanel = objective.gameObject;
+        OceanUI.SetRect(objective.rectTransform, new Vector2(0.12f, 0.70f), new Vector2(0.88f, 0.79f), Vector2.zero, Vector2.zero);
+        tutorialObjectiveText = OceanUI.CreateText("", objective.transform, 28f, OceanUI.Sand);
+        tutorialObjectivePanel.SetActive(false);
+
+        // Ink deliberately ignores the safe area so the effect covers the whole
+        // physical display, including the notch and curved-edge padding.
+        inkCloud = OceanUI.CreatePanel("Ink Cloud", canvas.transform, new Color(0.03f, 0.01f, 0.08f, 0.88f));
         OceanUI.Stretch(inkCloud.rectTransform, 0f);
         inkCloud.raycastTarget = false;
         inkCloud.gameObject.SetActive(false);
@@ -133,6 +159,8 @@ public class GameManager : MonoBehaviour
         pauseOverlay.SetActive(false);
         gameOverOverlay = BuildResultOverlay(root);
         gameOverOverlay.SetActive(false);
+        tutorialCompleteOverlay = BuildModal(root, "TUTORIAL COMPLETE", "You mastered movement, pearls, obstacles and every buff. You are ready for the reef!", "BACK", GoToMenu);
+        tutorialCompleteOverlay.SetActive(false);
 
         crabText = OceanUI.CreateText("", root, 43f, OceanUI.Foam);
         OceanUI.SetRect(crabText.rectTransform, new Vector2(0.08f, 0.37f), new Vector2(0.92f, 0.62f), Vector2.zero, Vector2.zero);
@@ -251,10 +279,10 @@ public class GameManager : MonoBehaviour
         if (!runPrepared)
         {
             runPrepared = true;
-            FindAnyObjectByType<MapManager>()?.ResetForSelectedRun();
-            FindAnyObjectByType<CameraController>()?.PrepareForSelectedRun();
-            playerController?.RefreshCharacter();
-            ApplyStageAtmosphere();
+            // The hub already previews the live gameplay world. Starting must not
+            // regenerate or reposition it; only activate the selected run items.
+            GameSession.BeginRun();
+            shieldReady = GameSession.ShieldReady;
         }
         gameStarted = true;
         gameOver = false;
@@ -263,10 +291,11 @@ public class GameManager : MonoBehaviour
         if (pearlChip != null) pearlChip.SetActive(true);
         if (pauseButton != null) pauseButton.gameObject.SetActive(true);
         if (tapToStartText != null) tapToStartText.gameObject.SetActive(false);
-        if (GameSession.SpeedDashReady) speedDashUntil = Time.time + 18f;
+        if (GameSession.SpeedDashReady) speedDashReady = true;
         if (GameSession.PearlMagnetReady) magnetUntil = Time.time + 20f;
         if (GameSession.InvincibilityReady) invincibleUntil = Time.time + 10f;
-        ShowStatus(GameSession.Mode == FishGameMode.Tutorial ? "STEP 1  TAP TO GO FORWARD - SWIPE TO TURN" : "GO!", 3.2f);
+        if (GameSession.Mode == FishGameMode.Tutorial) BeginScriptedTutorial();
+        else ShowStatus("GO!", 1.4f);
     }
 
     public void AddScore(int amount)
@@ -279,6 +308,18 @@ public class GameManager : MonoBehaviour
     public void CollectPearls(int amount)
     {
         GameSession.CollectPearl(amount);
+        if (GameSession.Mode == FishGameMode.Tutorial &&
+            (tutorialLesson == TutorialLesson.Pearls ||
+             (tutorialLesson == TutorialLesson.PearlMagnet && tutorialPowerCollected)))
+        {
+            tutorialPearls += Mathf.Max(0, amount);
+            int goal = tutorialLesson == TutorialLesson.PearlMagnet ? TutorialMagnetPearlGoal : 3;
+            string prefix = tutorialLesson == TutorialLesson.PearlMagnet
+                ? "USE THE MAGNET TO COLLECT THE PEARLS AHEAD"
+                : "COLLECT 3 PEARLS";
+            SetTutorialObjective($"{prefix}  {Mathf.Min(tutorialPearls, goal)} / {goal}");
+            if (tutorialPearls >= goal) AdvanceTutorial();
+        }
         ShowStatus(amount > 1 ? $"TREASURE! +{amount} PEARLS" : "+1 PEARL", 0.8f);
         UpdateHud();
     }
@@ -289,47 +330,202 @@ public class GameManager : MonoBehaviour
         switch (index)
         {
             case 0: shieldReady = true; ShowStatus("BUBBLE SHIELD READY", 1.2f); break;
-            case 1: speedDashUntil = Mathf.Max(speedDashUntil, Time.time) + 12f; ShowStatus("SPEED DASH", 1.2f); break;
+            case 1: speedDashReady = true; ShowStatus("SPEED DASH READY", 1.2f); break;
             case 2: magnetUntil = Mathf.Max(magnetUntil, Time.time) + 15f; ShowStatus("PEARL MAGNET", 1.2f); break;
             case 3: invincibleUntil = Mathf.Max(invincibleUntil, Time.time) + 8f; ShowStatus("INVINCIBLE BUBBLE", 1.2f); break;
         }
-        if (GameSession.Mode == FishGameMode.Tutorial && !tutorialBuffSeen)
-        {
-            tutorialBuffSeen = true;
-            ShowStatus("STEP 2  BUFFS HELP: SHIELD, DASH, MAGNET, INVINCIBLE", 4f);
-        }
+        if (GameSession.Mode == FishGameMode.Tutorial && TutorialPowerIndex(tutorialLesson) == index)
+            BeginTutorialPowerTrial(index);
     }
 
     public void NotifyPlayerMoved(Vector3 direction)
     {
         if (GameSession.Mode != FishGameMode.Tutorial || !gameStarted) return;
-        if (direction.z > 0f) tutorialForwardMoves++;
-        if (Mathf.Abs(direction.x) > 0f) tutorialSideMove = true;
-        if (tutorialForwardMoves == 3 && !tutorialSideMove)
-            ShowStatus("NOW SWIPE LEFT OR RIGHT TO CHANGE LANE", 2.8f);
-        else if (tutorialForwardMoves >= 3 && tutorialSideMove && !tutorialBuffSeen)
-            ShowStatus("STEP 2  FOLLOW THE PEARL PATTERN TO THE BUBBLE BUFF", 3.2f);
+        if (tutorialLesson == TutorialLesson.Movement)
+        {
+            if (direction.z > 0f) tutorialForwardMoves++;
+            if (Mathf.Abs(direction.x) > 0f) tutorialSideMove = true;
+            SetTutorialObjective($"MOVE: TAP FORWARD {Mathf.Min(tutorialForwardMoves, 3)} / 3  |  SWIPE SIDE {(tutorialSideMove ? 1 : 0)} / 1");
+            if (tutorialForwardMoves >= 3 && tutorialSideMove) AdvanceTutorial();
+            return;
+        }
+
+        if (IsObstacleLesson(tutorialLesson) && player != null && player.position.z > tutorialTargetZ + 0.1f)
+            AdvanceTutorial();
+
+        if (tutorialPowerCollected && tutorialLesson == TutorialLesson.SpeedDash)
+        {
+            // The move that collected the pickup may finish after GrantPowerUp.
+            // Count only the two new forward tiles traveled beyond that row.
+            if (direction.z > 0f && player != null && player.position.z > tutorialDashStartZ + 0.1f)
+                tutorialDashForwardMoves++;
+            SetTutorialObjective($"TAP FORWARD TO TRY THE SPEED DASH  {Mathf.Min(tutorialDashForwardMoves, 2)} / 2");
+            if (tutorialDashForwardMoves >= 2) AdvanceTutorial();
+            return;
+        }
+
+        if (tutorialPowerCollected && player != null &&
+            (tutorialLesson == TutorialLesson.BubbleShield ||
+             tutorialLesson == TutorialLesson.Invincibility) &&
+            player.position.z >= tutorialTargetZ - 0.1f)
+            AdvanceTutorial();
     }
 
     public void NotifyObstacleEncountered(SeaObstacleType type)
     {
-        if (GameSession.Mode != FishGameMode.Tutorial) return;
-        tutorialObstaclesSeen++;
-        string effect = type switch
+        if (GameSession.Mode != FishGameMode.Tutorial || !IsObstacleLesson(tutorialLesson)) return;
+        string hint = type switch
         {
-            SeaObstacleType.Coral => "CORAL BLOCKS THE LANE - MOVE AROUND IT",
-            SeaObstacleType.Squid => "SQUID INK BLOCKS YOUR VIEW",
-            SeaObstacleType.Jellyfish => "JELLYFISH STUNS YOU",
-            SeaObstacleType.Pufferfish => "PUFFERFISH BLOCKS A LANE",
-            SeaObstacleType.Crab => "CRAB: TAP, TAP, THEN SWIPE",
-            _ => "SHARKS END THE RUN"
+            SeaObstacleType.Coral => "CORAL BLOCKS YOU - CHANGE LANE",
+            SeaObstacleType.Squid => "SQUID RELEASES INK - RECOVER AND GO AROUND",
+            SeaObstacleType.Jellyfish => "JELLYFISH STUNS - WAIT, THEN DODGE",
+            SeaObstacleType.Pufferfish => "PUFFERFISH BLOCKS THE PATH - DODGE",
+            SeaObstacleType.Crab => "ESCAPE THE CRAB: TAP, TAP, SWIPE",
+            _ => "SHARKS ARE DEADLY - NEVER TOUCH THEM"
         };
-        ShowStatus($"STEP 3  {effect}", 3f);
-        if (tutorialObstaclesSeen >= 4)
+        ShowStatus(hint, 2.5f);
+    }
+
+    private void BeginScriptedTutorial()
+    {
+        tutorialMap = FindAnyObjectByType<MapManager>();
+        tutorialForwardMoves = 0;
+        tutorialSideMove = false;
+        tutorialPearls = 0;
+        tutorialLesson = TutorialLesson.Movement;
+        tutorialObjectivePanel.SetActive(true);
+        tutorialMap?.ClearTutorialContent();
+        SetTutorialObjective("MOVE: TAP FORWARD 0 / 3  |  SWIPE SIDE 0 / 1");
+        ShowStatus("LESSON 1: LEARN THE CONTROLS", 2f);
+    }
+
+    private void AdvanceTutorial()
+    {
+        if (tutorialLesson == TutorialLesson.Complete) return;
+        tutorialLesson++;
+        PrepareTutorialLesson();
+    }
+
+    private void PrepareTutorialLesson()
+    {
+        tutorialMap?.ClearTutorialContent();
+        int lane = player != null ? Mathf.RoundToInt(player.position.x) : 0;
+        float nextZ = player != null ? Mathf.Round(player.position.z) + 2f : 2f;
+
+        switch (tutorialLesson)
         {
-            GameSession.MarkTutorialComplete();
-            ShowStatus("TUTORIAL COMPLETE - KEEP MOVING AND BEAT YOUR SCORE!", 4f);
+            case TutorialLesson.Pearls:
+                tutorialPearls = 0;
+                tutorialMap?.SpawnTutorialPearlTrail(nextZ, lane, 3);
+                SetTutorialObjective("COLLECT 3 PEARLS  0 / 3");
+                ShowStatus("LESSON 2: PEARLS ARE YOUR CURRENCY", 2.4f);
+                break;
+            case TutorialLesson.Coral: PrepareObstacleLesson(SeaObstacleType.Coral, nextZ, lane, "DODGE THE CORAL AND MOVE PAST ITS ROW"); break;
+            case TutorialLesson.Squid: PrepareObstacleLesson(SeaObstacleType.Squid, nextZ, lane, "DODGE THE SQUID AND MOVE PAST ITS ROW"); break;
+            case TutorialLesson.Jellyfish: PrepareObstacleLesson(SeaObstacleType.Jellyfish, nextZ, lane, "DODGE THE JELLYFISH AND MOVE PAST ITS ROW"); break;
+            case TutorialLesson.Pufferfish: PrepareObstacleLesson(SeaObstacleType.Pufferfish, nextZ, lane, "DODGE THE PUFFERFISH AND MOVE PAST ITS ROW"); break;
+            case TutorialLesson.Crab: PrepareObstacleLesson(SeaObstacleType.Crab, nextZ, lane, "ESCAPE OR DODGE THE CRAB, THEN PASS ITS ROW"); break;
+            case TutorialLesson.Shark: PrepareObstacleLesson(SeaObstacleType.Shark, nextZ, lane, "AVOID THE SHARK AND MOVE PAST ITS ROW"); break;
+            case TutorialLesson.BubbleShield: PreparePowerLesson(CollectibleKind.BubbleShield, nextZ, lane, "COLLECT THE BUBBLE SHIELD"); break;
+            case TutorialLesson.SpeedDash: PreparePowerLesson(CollectibleKind.SpeedDash, nextZ, lane, "COLLECT THE SPEED DASH"); break;
+            case TutorialLesson.PearlMagnet: PreparePowerLesson(CollectibleKind.PearlMagnet, nextZ, lane, "COLLECT THE PEARL MAGNET"); break;
+            case TutorialLesson.Invincibility: PreparePowerLesson(CollectibleKind.InvincibilityBubble, nextZ, lane, "COLLECT THE INVINCIBILITY BUBBLE"); break;
+            case TutorialLesson.Complete:
+                GameSession.MarkTutorialComplete();
+                GameSession.BankRunPearls();
+                gameStarted = false;
+                playerController?.SetInputLocked(true);
+                if (pauseButton != null) pauseButton.gameObject.SetActive(false);
+                if (pearlChip != null) pearlChip.SetActive(false);
+                if (tutorialObjectivePanel != null) tutorialObjectivePanel.SetActive(false);
+                if (tutorialCompleteOverlay != null) tutorialCompleteOverlay.SetActive(true);
+                break;
         }
+    }
+
+    private void PrepareObstacleLesson(SeaObstacleType type, float z, int lane, string objective)
+    {
+        tutorialTargetZ = z;
+        tutorialMap?.SpawnTutorialObstacle(type, z, lane);
+        SetTutorialObjective(objective);
+        ShowStatus($"OBSTACLE LESSON: {type.ToString().ToUpperInvariant()}", 2f);
+    }
+
+    private void PreparePowerLesson(CollectibleKind kind, float z, int lane, string objective)
+    {
+        tutorialPowerCollected = false;
+        tutorialMap?.SpawnTutorialPowerUp(kind, z, lane);
+        SetTutorialObjective(objective);
+        ShowStatus("BUFF LESSON: " + kind.ToString().ToUpperInvariant(), 2f);
+    }
+
+    private void BeginTutorialPowerTrial(int index)
+    {
+        tutorialPowerCollected = true;
+        tutorialMap?.ClearTutorialContent();
+        int lane = player != null ? Mathf.RoundToInt(player.position.x) : 0;
+        float nextZ = player != null ? Mathf.Round(player.position.z) + 2f : 2f;
+
+        switch (index)
+        {
+            case 0:
+                tutorialTargetZ = nextZ;
+                tutorialMap?.SpawnTutorialObstacleLine(SeaObstacleType.Coral, nextZ);
+                SetTutorialObjective("USE THE SHIELD TO BREAK THROUGH THE CORAL WALL");
+                ShowStatus("MOVE FORWARD - THE SHIELD WILL BREAK ONE CORAL", 2.5f);
+                break;
+            case 1:
+                tutorialDashForwardMoves = 0;
+                tutorialDashStartZ = player != null ? Mathf.Ceil(player.position.z) : 0f;
+                SetTutorialObjective("TAP FORWARD TO TRY THE SPEED DASH  0 / 2");
+                ShowStatus("DASH FORWARD TWO TILES", 2f);
+                break;
+            case 2:
+                tutorialPearls = 0;
+                tutorialMap?.SpawnTutorialPearlPattern(Mathf.Round(nextZ - 1f), lane, TutorialMagnetPearlGoal);
+                SetTutorialObjective($"USE THE MAGNET TO COLLECT THE PEARLS AHEAD  0 / {TutorialMagnetPearlGoal}");
+                ShowStatus("FOLLOW THE PEARL TRAIL - COLLECT IT BEFORE CONTINUING", 2.5f);
+                break;
+            case 3:
+                tutorialTargetZ = nextZ;
+                tutorialMap?.SpawnTutorialObstacleLine(SeaObstacleType.Shark, nextZ);
+                SetTutorialObjective("USE INVINCIBILITY TO CROSS THE SHARK WALL");
+                ShowStatus("MOVE THROUGH THE SHARK WALL WHILE INVINCIBLE", 2.5f);
+                break;
+        }
+    }
+
+    public bool RetryTutorialSharkLesson()
+    {
+        if (GameSession.Mode != FishGameMode.Tutorial ||
+            tutorialLesson != TutorialLesson.Shark || !gameStarted) return false;
+
+        tutorialMap?.ClearTutorialContent();
+        int lane = player != null ? Mathf.RoundToInt(player.position.x) : 0;
+        float nextZ = player != null ? Mathf.Round(player.position.z) + 2f : 2f;
+        PrepareObstacleLesson(SeaObstacleType.Shark, nextZ, lane, "AVOID THE SHARK AND MOVE PAST ITS ROW");
+        ShowStatus("TRY AGAIN: CHANGE LANE BEFORE THE SHARK", 2.5f);
+        return true;
+    }
+
+    private void SetTutorialObjective(string objective)
+    {
+        if (tutorialObjectiveText != null) tutorialObjectiveText.text = "OBJECTIVE  |  " + objective;
+    }
+
+    private static bool IsObstacleLesson(TutorialLesson lesson) =>
+        lesson >= TutorialLesson.Coral && lesson <= TutorialLesson.Shark;
+
+    private static int TutorialPowerIndex(TutorialLesson lesson)
+    {
+        return lesson switch
+        {
+            TutorialLesson.BubbleShield => 0,
+            TutorialLesson.SpeedDash => 1,
+            TutorialLesson.PearlMagnet => 2,
+            TutorialLesson.Invincibility => 3,
+            _ => -1
+        };
     }
 
     public bool TryUseShield()
@@ -337,6 +533,15 @@ public class GameManager : MonoBehaviour
         if (!shieldReady) return false;
         shieldReady = false;
         ShowStatus("BUBBLE SHIELD SAVED YOU!", 1.4f);
+        return true;
+    }
+
+    public bool TryConsumeSpeedDash()
+    {
+        if (!gameStarted || !speedDashReady) return false;
+        speedDashReady = false;
+        ShowStatus("SPEED DASH!", 1f);
+        UpdateHud();
         return true;
     }
 
@@ -404,6 +609,11 @@ public class GameManager : MonoBehaviour
     {
         if (scoreText == null) return;
         scoreText.text = score.ToString();
+        if (bestScoreText != null)
+        {
+            int savedBest = PlayerPrefs.GetInt($"Fishfish.HighScore.{GameSession.Mode}", 0);
+            bestScoreText.text = $"BEST  {Mathf.Max(savedBest, score)}";
+        }
         if (pearlText != null) pearlText.text = $"PEARL  {GameSession.PearlWallet + GameSession.RunPearls}";
         timerText.text = GameSession.Mode == FishGameMode.TimeAttack ? $"TIME  {Mathf.CeilToInt(remainingTime)}" : "";
         string powers = "";
@@ -430,9 +640,9 @@ public class GameManager : MonoBehaviour
         gameStarted = false;
         if (pauseButton != null) pauseButton.gameObject.SetActive(false);
         if (pearlChip != null) pearlChip.SetActive(false);
+        if (tutorialObjectivePanel != null) tutorialObjectivePanel.SetActive(false);
         playerController?.SetInputLocked(true);
         GameSession.BankRunPearls();
-        if (GameSession.Mode == FishGameMode.Tutorial) GameSession.MarkTutorialComplete();
         string key = $"Fishfish.HighScore.{GameSession.Mode}";
         int best = Mathf.Max(score, PlayerPrefs.GetInt(key, 0));
         PlayerPrefs.SetInt(key, best);

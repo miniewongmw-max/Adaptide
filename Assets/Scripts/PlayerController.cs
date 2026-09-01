@@ -4,6 +4,12 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
+    [Header("Playable Character Prefabs")]
+    [Tooltip("Optional replacement for the turtle model already in the scene.")]
+    public GameObject turtleCharacterPrefab;
+    [Tooltip("Assign the final seal model prefab here.")]
+    public GameObject sealCharacterPrefab;
+
     public float tileSize = 1f;
     public float moveDuration = 0.12f;
     public float minX = -4f;
@@ -57,7 +63,7 @@ public class PlayerController : MonoBehaviour
     {
         if (!CanAcceptInput() || direction == Vector3.zero || moveQueue.Count >= 3) return;
         moveQueue.Enqueue(direction);
-        if (direction == Vector3.forward && GameManager.Instance.HasSpeedDash && moveQueue.Count < 3)
+        if (direction == Vector3.forward && moveQueue.Count < 3 && GameManager.Instance.TryConsumeSpeedDash())
             moveQueue.Enqueue(direction);
         if (!isMoving) StartCoroutine(MovePlayer());
     }
@@ -163,6 +169,12 @@ public class PlayerController : MonoBehaviour
 
     public void RefreshCharacter()
     {
+        Transform oldRuntimeCharacter = transform.Find("Runtime Character");
+        if (oldRuntimeCharacter != null)
+        {
+            oldRuntimeCharacter.gameObject.SetActive(false);
+            Destroy(oldRuntimeCharacter.gameObject);
+        }
         Transform oldSeal = transform.Find("Runtime Seal");
         if (oldSeal != null)
         {
@@ -170,10 +182,23 @@ public class PlayerController : MonoBehaviour
             Destroy(oldSeal.gameObject);
         }
         foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true)) renderer.enabled = true;
-        if (GameSession.EquippedCharacter == 1)
+
+        int selectedCharacter = GameSession.EquippedCharacter;
+        GameObject selectedPrefab = selectedCharacter == 1 ? sealCharacterPrefab : turtleCharacterPrefab;
+        if (selectedPrefab != null)
         {
-            BuildSealCharacter();
+            foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true)) renderer.enabled = false;
+            GameObject model = Instantiate(selectedPrefab, transform);
+            model.name = "Runtime Character";
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = Quaternion.identity;
+            foreach (Collider modelCollider in model.GetComponentsInChildren<Collider>(true)) modelCollider.enabled = false;
+            foreach (Rigidbody modelBody in model.GetComponentsInChildren<Rigidbody>(true)) modelBody.isKinematic = true;
             return;
+        }
+        if (selectedCharacter == 1)
+        {
+            Debug.LogWarning("Seal character prefab is not assigned. Using the existing player visual as a fallback.", this);
         }
         Color[] palettes =
         {
@@ -190,31 +215,4 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void BuildSealCharacter()
-    {
-        foreach (Renderer renderer in GetComponentsInChildren<Renderer>()) renderer.enabled = false;
-        GameObject sealRoot = new GameObject("Runtime Seal");
-        sealRoot.transform.SetParent(transform, false);
-        Color body = new Color32(156, 197, 211, 255);
-        CreateSealPart(sealRoot.transform, "Seal Body", PrimitiveType.Capsule, new Vector3(0f, 0.45f, 0f), new Vector3(0.72f, 0.55f, 0.95f), body);
-        CreateSealPart(sealRoot.transform, "Seal Head", PrimitiveType.Sphere, new Vector3(0f, 0.55f, 0.42f), new Vector3(0.62f, 0.52f, 0.62f), new Color32(178, 216, 225, 255));
-        CreateSealPart(sealRoot.transform, "Left Flipper", PrimitiveType.Sphere, new Vector3(-0.42f, 0.30f, 0f), new Vector3(0.42f, 0.12f, 0.62f), body, -24f);
-        CreateSealPart(sealRoot.transform, "Right Flipper", PrimitiveType.Sphere, new Vector3(0.42f, 0.30f, 0f), new Vector3(0.42f, 0.12f, 0.62f), body, 24f);
-        CreateSealPart(sealRoot.transform, "Nose", PrimitiveType.Sphere, new Vector3(0f, 0.57f, 0.72f), Vector3.one * 0.15f, new Color32(29, 55, 68, 255));
-    }
-
-    private void CreateSealPart(Transform parent, string partName, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Color color, float zRotation = 0f)
-    {
-        GameObject part = GameObject.CreatePrimitive(type);
-        part.name = partName;
-        part.transform.SetParent(parent, false);
-        part.transform.localPosition = localPosition;
-        part.transform.localScale = localScale;
-        part.transform.localRotation = Quaternion.Euler(90f, 0f, zRotation);
-        Collider partCollider = part.GetComponent<Collider>();
-        if (partCollider != null) Destroy(partCollider);
-        Renderer renderer = part.GetComponent<Renderer>();
-        if (renderer.material.HasProperty("_BaseColor")) renderer.material.SetColor("_BaseColor", color);
-        else renderer.material.color = color;
-    }
 }

@@ -841,7 +841,7 @@ MonoBehaviour:
   catchUpSpeed: 3
   maxDistanceAhead: 5
   horizontalOffset: 3.1
-  desiredPlayerScreenY: 0.35
+  desiredPlayerScreenY: 0.5
   smoothness: 3
 --- !u!1001 &1879033257
 PrefabInstance:

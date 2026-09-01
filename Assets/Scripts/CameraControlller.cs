@@ -7,9 +7,12 @@ public class CameraController : MonoBehaviour
     public float minimumSpeed = 0.8f;
     public float catchUpSpeed = 3f;
     public float maxDistanceAhead = 5f;
-    public float desiredPlayerScreenY = 0.30f;
+    [Range(0.4f, 0.6f)]
+    public float desiredPlayerScreenY = 0.50f;
     public float smoothness = 3f;
     public float cameraDistance = 11f;
+    [Tooltip("Keep at zero to place the character in the phone screen centre.")]
+    public float focusAheadOfPlayer = 0f;
     public Vector3 isometricEuler = new Vector3(48f, -30f, 0f);
 
     private float currentSpeed;
@@ -32,7 +35,7 @@ public class CameraController : MonoBehaviour
         switch (GameSession.Mode)
         {
             case FishGameMode.Tutorial:
-                minimumSpeed = 0.45f + stageBoost;
+                minimumSpeed = 0f;
                 catchUpSpeed = 2.1f;
                 break;
             case FishGameMode.TimeAttack:
@@ -57,6 +60,7 @@ public class CameraController : MonoBehaviour
 
     public void PrepareForSelectedRun()
     {
+        if (cameraComponent == null) cameraComponent = GetComponent<Camera>();
         ConfigureForMode();
         currentSpeed = minimumSpeed;
         ApplyOrientation();
@@ -66,8 +70,8 @@ public class CameraController : MonoBehaviour
     void SnapToFocus()
     {
         if (player == null) return;
-        focusZ = player.position.z + 2.2f;
-        Vector3 focus = new Vector3(0f, 0f, focusZ);
+        focusZ = player.position.z + focusAheadOfPlayer;
+        Vector3 focus = new Vector3(0f, player.position.y, focusZ);
         transform.position = focus - transform.forward * cameraDistance;
     }
 
@@ -77,13 +81,17 @@ public class CameraController : MonoBehaviour
     {
         ApplyOrientation();
     }
-    if (GameManager.Instance == null)
+    if (player != null && (GameManager.Instance == null ||
+        !GameManager.Instance.gameStarted || GameManager.Instance.gameOver))
     {
+        // Keep the preview and ready-state character centred every frame. This
+        // also prevents scene Start-order differences from restoring an old
+        // serialized camera transform after the initial snap.
+        SnapToFocus();
         return;
     }
 
-    if (!GameManager.Instance.gameStarted ||
-        GameManager.Instance.gameOver)
+    if (GameManager.Instance == null)
     {
         return;
     }
@@ -117,11 +125,11 @@ public class CameraController : MonoBehaviour
         );
 
         focusZ += currentSpeed * Time.deltaTime;
-        focusZ = Mathf.Max(focusZ, player.position.z + 1.8f);
+        focusZ = Mathf.Max(focusZ, player.position.z + focusAheadOfPlayer);
 
         // Keep the reef centred like a Crossy Road camera. Lateral player hops do
         // not drag the whole board sideways.
-        Vector3 focus = new Vector3(0f, 0f, focusZ);
+        Vector3 focus = new Vector3(0f, player.position.y, focusZ);
         Vector3 target = focus - transform.forward * cameraDistance;
         transform.position = Vector3.Lerp(transform.position, target, smoothness * Time.deltaTime);
     }

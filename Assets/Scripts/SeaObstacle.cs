@@ -16,8 +16,14 @@ public class SeaObstacle : MonoBehaviour
 
     public void Initialize(SeaObstacleType newType)
     {
+        Initialize(newType, true);
+    }
+
+    public void Initialize(SeaObstacleType newType, bool applyFallbackTint)
+    {
         type = newType;
         name = newType.ToString();
+        if (!applyFallbackTint) return;
         Color color = type switch
         {
             SeaObstacleType.Coral => new Color32(246, 121, 105, 255),
@@ -60,6 +66,7 @@ public class SeaObstacle : MonoBehaviour
                 GameManager.Instance.ShowStatus("PUFFER BLOCK! FIND ANOTHER WAY", 1.1f);
                 return true;
             case SeaObstacleType.Shark:
+                if (GameManager.Instance.RetryTutorialSharkLesson()) return true;
                 GameManager.Instance.GameOver("Caught by a shark");
                 return true;
             default:

@@ -14,6 +14,7 @@ public class StageCarousel3D : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private float currentAngle;
     private float targetAngle;
     private float dragStartAngle;
+    private bool tutorialLocked;
     private const float Spacing = 120f;
 
     public int SelectedIndex => selectedIndex;
@@ -41,8 +42,24 @@ public class StageCarousel3D : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     public void Previous() => Select((selectedIndex - 1 + cards.Length) % cards.Length);
     public void Next() => Select((selectedIndex + 1) % cards.Length);
 
+    public void SetTutorialLocked(bool locked)
+    {
+        if (tutorialLocked == locked) return;
+        tutorialLocked = locked;
+        if (cards != null)
+        {
+            for (int i = 0; i < cards.Length; i++) cards[i].gameObject.SetActive(!locked || i == 0);
+        }
+        if (locked)
+        {
+            selectedIndex = 0;
+            currentAngle = targetAngle = 0f;
+        }
+    }
+
     public void Select(int index)
     {
+        if (tutorialLocked) index = 0;
         selectedIndex = Mathf.Clamp(index, 0, cards.Length - 1);
         targetAngle = -selectedIndex * Spacing;
         SelectionChanged?.Invoke(selectedIndex);
@@ -52,11 +69,13 @@ public class StageCarousel3D : MonoBehaviour, IBeginDragHandler, IDragHandler, I
 
     public void OnDrag(PointerEventData eventData)
     {
+        if (tutorialLocked) return;
         targetAngle = dragStartAngle + eventData.position.x - eventData.pressPosition.x;
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        if (tutorialLocked) return;
         float delta = eventData.position.x - eventData.pressPosition.x;
         if (Mathf.Abs(delta) > 45f) Select(delta > 0 ? (selectedIndex - 1 + cards.Length) % cards.Length : (selectedIndex + 1) % cards.Length);
         else Select(selectedIndex);
