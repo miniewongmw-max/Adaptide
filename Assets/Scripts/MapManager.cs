@@ -32,6 +32,11 @@ public class MapManager : MonoBehaviour
     public float obstacleHeight = 0.5f;
     public int maximumObstaclesPerRow = 4;
     public LayerMask obstacleLayer;
+    private int pearlPatternLane;
+    private int pearlPatternRemaining;
+    private int pearlPatternDirection = 1;
+    private int pearlPatternCooldown;
+    private int tutorialObstacleIndex;
 
     void Start()
     {
@@ -45,19 +50,19 @@ public class MapManager : MonoBehaviour
         switch (GameSession.Mode)
         {
             case FishGameMode.Tutorial:
-                obstacleSpawnChance = 0.28f + stage * 0.04f;
-                maximumObstaclesPerRow = 2;
-                collectibleSpawnChance = 0.24f;
+                obstacleSpawnChance = 0.18f;
+                maximumObstaclesPerRow = 1;
+                collectibleSpawnChance = 0.22f;
                 break;
             case FishGameMode.TimeAttack:
-                obstacleSpawnChance = 0.48f + stage * 0.06f;
-                maximumObstaclesPerRow = 4 + stage;
-                collectibleSpawnChance = 0.20f;
+                obstacleSpawnChance = 0.34f + stage * 0.04f;
+                maximumObstaclesPerRow = 2;
+                collectibleSpawnChance = 0.30f;
                 break;
             default:
-                obstacleSpawnChance = 0.38f + stage * 0.07f;
-                maximumObstaclesPerRow = 3 + stage;
-                collectibleSpawnChance = 0.18f;
+                obstacleSpawnChance = 0.27f + stage * 0.04f;
+                maximumObstaclesPerRow = 2;
+                collectibleSpawnChance = 0.25f;
                 break;
         }
     }
@@ -121,7 +126,11 @@ public class MapManager : MonoBehaviour
             collectibleContainer.transform.SetParent(rowObject.transform);
             collectibleContainer.transform.localPosition = Vector3.zero;
 
-            if (i >= 15) //Start spawning after the 15th row
+            if (GameSession.Mode == FishGameMode.Tutorial)
+            {
+                SpawnTutorialRow(rowObject.transform, i);
+            }
+            else if (i >= 10)
             {
                 SpawnObstacles(rowObject.transform);
                 SpawnCollectibles(rowObject.transform);
@@ -134,6 +143,53 @@ public class MapManager : MonoBehaviour
         // 下一排接在目前地图最前面
         nextRowZ = startingZ + length;
 
+    }
+
+    public void ResetForSelectedRun()
+    {
+        foreach (Transform row in rows)
+        {
+            if (row == null) continue;
+            row.gameObject.SetActive(false);
+            Destroy(row.gameObject);
+        }
+        rows.Clear();
+        pearlPatternRemaining = 0;
+        pearlPatternCooldown = 0;
+        tutorialObstacleIndex = 0;
+        ConfigureDifficulty();
+        GenerateStartingMap();
+    }
+
+    void SpawnTutorialRow(Transform row, int index)
+    {
+        // The first safe rows teach movement. The shield then introduces buffs,
+        // followed by one clearly separated example obstacle per row.
+        if (index == 10)
+        {
+            List<int> lane = new List<int> { 0 };
+            CreateBonusCollectible(row.Find("Collectibles"), lane, CollectibleKind.BubbleShield);
+            return;
+        }
+        if (index == 13 || index == 15 || index == 17 || index == 19)
+        {
+            SpawnTutorialObstacle(row, index == 13 ? -2 : index == 15 ? 0 : index == 17 ? 2 : -1);
+            return;
+        }
+        if (index >= 7) SpawnCollectibles(row);
+    }
+
+    void SpawnTutorialObstacle(Transform row, int lane)
+    {
+        if (obstaclePrefabs == null || obstaclePrefabs.Count == 0) return;
+        Transform container = row.Find("Obstacles");
+        GameObject obstacle = Instantiate(obstaclePrefabs[tutorialObstacleIndex % obstaclePrefabs.Count], container);
+        obstacle.transform.localPosition = new Vector3(lane, obstacleHeight, 0f);
+        SeaObstacle behaviour = obstacle.GetComponent<SeaObstacle>();
+        if (behaviour == null) behaviour = obstacle.AddComponent<SeaObstacle>();
+        SeaObstacleType[] lessons = { SeaObstacleType.Coral, SeaObstacleType.Squid, SeaObstacleType.Jellyfish, SeaObstacleType.Crab };
+        behaviour.Initialize(lessons[tutorialObstacleIndex % lessons.Length]);
+        tutorialObstacleIndex++;
     }
 
     void RecycleRows()
@@ -232,17 +288,19 @@ public class MapManager : MonoBehaviour
         float roll = Random.value;
         if (GameSession.Mode == FishGameMode.Tutorial)
         {
-            if (roll < 0.30f) return SeaObstacleType.Squid;
-            if (roll < 0.55f) return SeaObstacleType.Jellyfish;
-            if (roll < 0.78f) return SeaObstacleType.Crab;
+            if (roll < 0.28f) return SeaObstacleType.Coral;
+            if (roll < 0.48f) return SeaObstacleType.Squid;
+            if (roll < 0.68f) return SeaObstacleType.Jellyfish;
+            if (roll < 0.84f) return SeaObstacleType.Crab;
             return SeaObstacleType.Pufferfish;
         }
 
         float sharkChance = GameSession.SelectedStage == 2 ? 0.20f : 0.10f;
         if (roll < sharkChance) return SeaObstacleType.Shark;
-        if (roll < 0.30f) return SeaObstacleType.Squid;
-        if (roll < 0.52f) return SeaObstacleType.Crab;
-        if (roll < 0.75f) return SeaObstacleType.Jellyfish;
+        if (roll < sharkChance + 0.25f) return SeaObstacleType.Coral;
+        if (roll < 0.45f) return SeaObstacleType.Squid;
+        if (roll < 0.62f) return SeaObstacleType.Crab;
+        if (roll < 0.80f) return SeaObstacleType.Jellyfish;
         return SeaObstacleType.Pufferfish;
     }
 
@@ -293,26 +351,30 @@ public class MapManager : MonoBehaviour
         {
             if (occupied.Contains(x)) continue;
             freeLanes.Add(x);
-            if (Random.value > collectibleSpawnChance)
+        }
+
+        if (pearlPatternRemaining <= 0)
+        {
+            if (pearlPatternCooldown > 0) pearlPatternCooldown--;
+            else if (Random.value < collectibleSpawnChance)
             {
-                continue;
+                pearlPatternLane = Random.Range(-2, 3);
+                pearlPatternDirection = Random.value < 0.5f ? -1 : 1;
+                pearlPatternRemaining = Random.Range(3, 6);
             }
+        }
 
-            Vector3 localPosition =
-                new Vector3(x, collectibleHeight, 0f);
-
-            int randomIndex =
-                Random.Range(0, collectiblePrefabs.Count);
-
-            GameObject collectible = Instantiate(
-                collectiblePrefabs[randomIndex],
-                collectibleContainer
-            );
-
-            collectible.transform.localPosition = localPosition;
-            CollectibleItem item = collectible.GetComponent<CollectibleItem>();
-            if (item == null) item = collectible.AddComponent<CollectibleItem>();
-            item.kind = CollectibleKind.Pearl;
+        if (pearlPatternRemaining > 0 && freeLanes.Count > 0)
+        {
+            int lane = ClosestFreeLane(freeLanes, pearlPatternLane);
+            SpawnPearl(collectibleContainer, lane);
+            // Occasional paired pearl, never more than two on a row.
+            int neighbour = lane + pearlPatternDirection;
+            if (Random.value < 0.24f && freeLanes.Contains(neighbour)) SpawnPearl(collectibleContainer, neighbour);
+            pearlPatternLane = Mathf.Clamp(pearlPatternLane + pearlPatternDirection, -3, 3);
+            if (Mathf.Abs(pearlPatternLane) >= 3) pearlPatternDirection *= -1;
+            pearlPatternRemaining--;
+            if (pearlPatternRemaining == 0) pearlPatternCooldown = Random.Range(2, 5);
         }
 
         if (freeLanes.Count > 0)
@@ -322,6 +384,23 @@ public class MapManager : MonoBehaviour
             else if (bonusRoll < 0.09f) CreateBonusCollectible(collectibleContainer, freeLanes, CollectibleKind.Starfish);
             else if (bonusRoll < 0.115f) CreateBonusCollectible(collectibleContainer, freeLanes, (CollectibleKind)Random.Range(3, 7));
         }
+    }
+
+    int ClosestFreeLane(List<int> lanes, int desired)
+    {
+        int best = lanes[0];
+        foreach (int lane in lanes)
+            if (Mathf.Abs(lane - desired) < Mathf.Abs(best - desired)) best = lane;
+        return best;
+    }
+
+    void SpawnPearl(Transform container, int lane)
+    {
+        GameObject collectible = Instantiate(collectiblePrefabs[Random.Range(0, collectiblePrefabs.Count)], container);
+        collectible.transform.localPosition = new Vector3(lane, collectibleHeight, 0f);
+        CollectibleItem item = collectible.GetComponent<CollectibleItem>();
+        if (item == null) item = collectible.AddComponent<CollectibleItem>();
+        item.kind = CollectibleKind.Pearl;
     }
 
     void CreateBonusCollectible(Transform container, List<int> freeLanes, CollectibleKind kind)

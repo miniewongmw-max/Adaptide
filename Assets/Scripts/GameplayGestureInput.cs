@@ -25,7 +25,13 @@ public class GameplayGestureInput : MonoBehaviour, IPointerDownHandler, IPointer
 
         if (delta.magnitude < threshold)
         {
-            GameManager.Instance?.RegisterEscapeInput(true);
+            if (GameManager.Instance != null && GameManager.Instance.RegisterEscapeInput(true)) return;
+            if (GameManager.Instance != null && !GameManager.Instance.gameStarted)
+            {
+                GameManager.Instance.TryStartFromTap();
+                return;
+            }
+            player?.QueueMove(Vector3.forward);
             return;
         }
 

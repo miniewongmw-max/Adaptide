@@ -19,11 +19,13 @@ public class PlayerController : MonoBehaviour
     private bool inputLocked;
     private float stunnedUntil;
     private float nextMagnetScan;
+    private float furthestScoredZ;
     private readonly Queue<Vector3> moveQueue = new Queue<Vector3>();
 
     private void Start()
     {
-        ApplyTurtlePalette();
+        furthestScoredZ = transform.position.z;
+        RefreshCharacter();
     }
 
     private void Update()
@@ -110,7 +112,13 @@ public class PlayerController : MonoBehaviour
                 yield return null;
             }
             transform.position = target;
-            if (direction.z > 0f) GameManager.Instance.AddScore(1);
+            GameManager.Instance?.NotifyPlayerMoved(direction);
+            if (direction.z > 0f && transform.position.z > furthestScoredZ + 0.01f)
+            {
+                int newlyReachedRows = Mathf.Max(1, Mathf.RoundToInt((transform.position.z - furthestScoredZ) / tileSize));
+                furthestScoredZ = transform.position.z;
+                GameManager.Instance.AddScore(newlyReachedRows);
+            }
             CheckBackRow();
         }
         isMoving = false;
@@ -153,8 +161,20 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void ApplyTurtlePalette()
+    public void RefreshCharacter()
     {
+        Transform oldSeal = transform.Find("Runtime Seal");
+        if (oldSeal != null)
+        {
+            oldSeal.gameObject.SetActive(false);
+            Destroy(oldSeal.gameObject);
+        }
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true)) renderer.enabled = true;
+        if (GameSession.EquippedCharacter == 1)
+        {
+            BuildSealCharacter();
+            return;
+        }
         Color[] palettes =
         {
             new Color32(101, 190, 129, 255),
@@ -168,5 +188,33 @@ public class PlayerController : MonoBehaviour
             if (renderer.material.HasProperty("_BaseColor")) renderer.material.SetColor("_BaseColor", color);
             else if (renderer.material.HasProperty("_Color")) renderer.material.color = color;
         }
+    }
+
+    private void BuildSealCharacter()
+    {
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>()) renderer.enabled = false;
+        GameObject sealRoot = new GameObject("Runtime Seal");
+        sealRoot.transform.SetParent(transform, false);
+        Color body = new Color32(156, 197, 211, 255);
+        CreateSealPart(sealRoot.transform, "Seal Body", PrimitiveType.Capsule, new Vector3(0f, 0.45f, 0f), new Vector3(0.72f, 0.55f, 0.95f), body);
+        CreateSealPart(sealRoot.transform, "Seal Head", PrimitiveType.Sphere, new Vector3(0f, 0.55f, 0.42f), new Vector3(0.62f, 0.52f, 0.62f), new Color32(178, 216, 225, 255));
+        CreateSealPart(sealRoot.transform, "Left Flipper", PrimitiveType.Sphere, new Vector3(-0.42f, 0.30f, 0f), new Vector3(0.42f, 0.12f, 0.62f), body, -24f);
+        CreateSealPart(sealRoot.transform, "Right Flipper", PrimitiveType.Sphere, new Vector3(0.42f, 0.30f, 0f), new Vector3(0.42f, 0.12f, 0.62f), body, 24f);
+        CreateSealPart(sealRoot.transform, "Nose", PrimitiveType.Sphere, new Vector3(0f, 0.57f, 0.72f), Vector3.one * 0.15f, new Color32(29, 55, 68, 255));
+    }
+
+    private void CreateSealPart(Transform parent, string partName, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Color color, float zRotation = 0f)
+    {
+        GameObject part = GameObject.CreatePrimitive(type);
+        part.name = partName;
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = localPosition;
+        part.transform.localScale = localScale;
+        part.transform.localRotation = Quaternion.Euler(90f, 0f, zRotation);
+        Collider partCollider = part.GetComponent<Collider>();
+        if (partCollider != null) Destroy(partCollider);
+        Renderer renderer = part.GetComponent<Renderer>();
+        if (renderer.material.HasProperty("_BaseColor")) renderer.material.SetColor("_BaseColor", color);
+        else renderer.material.color = color;
     }
 }

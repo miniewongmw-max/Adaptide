@@ -12,6 +12,7 @@ public static class GameSession
     private const string PearlKey = "Fishfish.Pearls";
     private const string SkinKey = "Fishfish.Skin";
     private const string TutorialKey = "Fishfish.TutorialComplete";
+    private const string TouchControlsKey = "Fishfish.TouchControls";
 
     public static FishGameMode Mode { get; set; } = FishGameMode.Standard;
     public static int SelectedStage { get; set; }
@@ -37,7 +38,18 @@ public static class GameSession
 
     public static int PearlWallet => PlayerPrefs.GetInt(PearlKey, 0);
     public static int EquippedSkin => PlayerPrefs.GetInt(SkinKey, 0);
+    public static int EquippedCharacter => EquippedSkin;
+    public static string EquippedCharacterName => EquippedCharacter == 1 ? "Seal" : "Turtle";
     public static bool TutorialComplete => PlayerPrefs.GetInt(TutorialKey, 0) == 1;
+    public static bool ShowTouchControls
+    {
+        get => PlayerPrefs.GetInt(TouchControlsKey, Application.isMobilePlatform ? 1 : 0) == 1;
+        set
+        {
+            PlayerPrefs.SetInt(TouchControlsKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+    }
 
     public static void BeginRun()
     {

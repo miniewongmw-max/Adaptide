@@ -22,9 +22,10 @@ public class GameManager : MonoBehaviour
     private TMP_Text powerText;
     private TMP_Text crabText;
     private Image inkCloud;
-    private GameObject startOverlay;
     private GameObject pauseOverlay;
     private GameObject gameOverOverlay;
+    private Button pauseButton;
+    private GameObject pearlChip;
     private TMP_Text resultText;
     private float remainingTime = 60f;
     private int score;
@@ -36,6 +37,12 @@ public class GameManager : MonoBehaviour
     private int crabStep = -1;
     private SeaObstacle crabObstacle;
     private Coroutine statusRoutine;
+    private MainMenuBehaviour gameplayHub;
+    private bool runPrepared;
+    private int tutorialForwardMoves;
+    private bool tutorialSideMove;
+    private bool tutorialBuffSeen;
+    private int tutorialObstaclesSeen;
 
     public bool HasSpeedDash => gameStarted && Time.time < speedDashUntil;
     public bool HasPearlMagnet => gameStarted && Time.time < magnetUntil;
@@ -57,6 +64,8 @@ public class GameManager : MonoBehaviour
         GameSession.BeginRun();
         shieldReady = GameSession.ShieldReady;
         UpdateHud();
+        gameplayHub = gameObject.AddComponent<MainMenuBehaviour>();
+        gameplayHub.BuildOnGameplay();
     }
 
     private void Update()
@@ -89,21 +98,25 @@ public class GameManager : MonoBehaviour
         GameplayGestureInput gestures = gestureSurface.gameObject.AddComponent<GameplayGestureInput>();
         gestures.player = playerController;
 
-        Image top = OceanUI.CreatePanel("HUD", root, new Color(0.02f, 0.20f, 0.29f, 0.84f));
-        OceanUI.SetRect(top.rectTransform, new Vector2(0.02f, 0.87f), new Vector2(0.98f, 0.98f), Vector2.zero, Vector2.zero);
-        scoreText = OceanUI.CreateText("SCORE  0", top.transform, 34f, OceanUI.Foam, TextAlignmentOptions.Left);
-        pearlText = OceanUI.CreateText("PEARLS  0", top.transform, 34f, OceanUI.Sand, TextAlignmentOptions.Center);
-        timerText = OceanUI.CreateText("", top.transform, 34f, OceanUI.Coral, TextAlignmentOptions.Right);
-        OceanUI.SetRect(scoreText.rectTransform, new Vector2(0.04f, 0.08f), new Vector2(0.36f, 0.92f), Vector2.zero, Vector2.zero);
-        OceanUI.SetRect(pearlText.rectTransform, new Vector2(0.33f, 0.08f), new Vector2(0.68f, 0.92f), Vector2.zero, Vector2.zero);
-        OceanUI.SetRect(timerText.rectTransform, new Vector2(0.65f, 0.08f), new Vector2(0.95f, 0.92f), Vector2.zero, Vector2.zero);
+        Image pearlPanel = OceanUI.CreatePanel("Pearls", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
+        pearlChip = pearlPanel.gameObject;
+        OceanUI.SetRect(pearlPanel.rectTransform, new Vector2(0.025f, 0.90f), new Vector2(0.30f, 0.975f), Vector2.zero, Vector2.zero);
+        pearlText = OceanUI.CreateText("PEARL  0", pearlPanel.transform, 36f, OceanUI.Sand, TextAlignmentOptions.Left);
+        pearlChip.SetActive(false);
 
-        Button pause = OceanUI.CreateButton("Pause", "PAUSE", root, OceanUI.Panel, TogglePause);
-        pause.GetComponentInChildren<TMP_Text>().fontSize = 22f;
-        OceanUI.SetRect(pause.GetComponent<RectTransform>(), new Vector2(0.84f, 0.77f), new Vector2(0.97f, 0.85f), Vector2.zero, Vector2.zero);
+        Image scoreChip = OceanUI.CreatePanel("Score", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
+        OceanUI.SetRect(scoreChip.rectTransform, new Vector2(0.70f, 0.90f), new Vector2(0.975f, 0.975f), Vector2.zero, Vector2.zero);
+        scoreText = OceanUI.CreateText("0", scoreChip.transform, 50f, OceanUI.Foam, TextAlignmentOptions.Right);
+        timerText = OceanUI.CreateText("", root, 28f, OceanUI.Coral, TextAlignmentOptions.Right);
+        OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
+
+        pauseButton = OceanUI.CreateButton("Pause", "PAUSE", root, OceanUI.Panel, TogglePause);
+        pauseButton.GetComponentInChildren<TMP_Text>().fontSize = 22f;
+        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.835f, 0.79f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
+        pauseButton.gameObject.SetActive(false);
 
         powerText = OceanUI.CreateText("", root, 24f, OceanUI.Foam, TextAlignmentOptions.Left);
-        OceanUI.SetRect(powerText.rectTransform, new Vector2(0.03f, 0.79f), new Vector2(0.75f, 0.86f), Vector2.zero, Vector2.zero);
+        OceanUI.SetRect(powerText.rectTransform, new Vector2(0.03f, 0.84f), new Vector2(0.65f, 0.895f), Vector2.zero, Vector2.zero);
 
         BuildDpad(root, adaptive);
 
@@ -115,13 +128,10 @@ public class GameManager : MonoBehaviour
         inkCloud.raycastTarget = false;
         inkCloud.gameObject.SetActive(false);
 
-        startOverlay = BuildModal(root, "READY TO DIVE?", StartDescription(), "START", StartGame);
         pauseOverlay = BuildModal(root, "CURRENT PAUSED", "Take a breath. Your turtle is safe here.", "RESUME", TogglePause);
-        AddModalSecondaryButton(pauseOverlay.transform, "MAIN MENU", GoToMenu);
+        AddModalSecondaryButton(pauseOverlay.transform, "BOTTOM MENU", GoToMenu);
         pauseOverlay.SetActive(false);
-        gameOverOverlay = BuildModal(root, "DIVE COMPLETE", "", "TRY AGAIN", Restart);
-        resultText = gameOverOverlay.transform.Find("Panel/Body")?.GetComponent<TMP_Text>();
-        AddModalSecondaryButton(gameOverOverlay.transform, "STAGE SELECT", GoToMenu);
+        gameOverOverlay = BuildResultOverlay(root);
         gameOverOverlay.SetActive(false);
 
         crabText = OceanUI.CreateText("", root, 43f, OceanUI.Foam);
@@ -135,6 +145,7 @@ public class GameManager : MonoBehaviour
         RectTransform dpad = dpadObject.GetComponent<RectTransform>();
         OceanUI.SetCentered(dpad, Vector2.zero, new Vector2(420f, 420f));
         adaptive.dpad = dpad;
+        dpadObject.SetActive(GameSession.ShowTouchControls);
         CreateMoveButton(dpad, "^", Vector3.forward, new Vector2(0f, 125f));
         CreateMoveButton(dpad, "v", Vector3.back, new Vector2(0f, -125f));
         CreateMoveButton(dpad, "<", Vector3.left, new Vector2(-125f, 0f));
@@ -142,6 +153,22 @@ public class GameManager : MonoBehaviour
         Image center = OceanUI.CreatePanel("Pad Center", dpad, new Color(0.13f, 0.65f, 0.68f, 0.35f));
         OceanUI.SetCentered(center.rectTransform, Vector2.zero, new Vector2(112f, 112f));
         center.raycastTarget = false;
+    }
+
+    private GameObject BuildResultOverlay(RectTransform root)
+    {
+        GameObject overlay = OceanUI.CreateObject("Dive Result", root);
+        OceanUI.Stretch(overlay.GetComponent<RectTransform>(), 0f);
+        Image dim = overlay.AddComponent<Image>();
+        dim.color = new Color(0.01f, 0.08f, 0.13f, 0.58f);
+        resultText = OceanUI.CreateText("", overlay.transform, 54f, OceanUI.Foam);
+        OceanUI.SetRect(resultText.rectTransform, new Vector2(0.08f, 0.35f), new Vector2(0.92f, 0.72f), Vector2.zero, Vector2.zero);
+        Button retry = OceanUI.CreateButton("Retry", "RETRY", overlay.transform, OceanUI.Sand, Restart);
+        OceanUI.SetRect(retry.GetComponent<RectTransform>(), new Vector2(0.25f, 0.12f), new Vector2(0.75f, 0.22f), Vector2.zero, Vector2.zero);
+        Button hub = OceanUI.CreateButton("Hub", "BOTTOM MENU", overlay.transform, OceanUI.Panel, GoToMenu);
+        OceanUI.SetRect(hub.GetComponent<RectTransform>(), new Vector2(0.34f, 0.045f), new Vector2(0.66f, 0.105f), Vector2.zero, Vector2.zero);
+        hub.GetComponentInChildren<TMP_Text>().fontSize = 24f;
+        return overlay;
     }
 
     private void CreateMoveButton(RectTransform parent, string label, Vector3 direction, Vector2 position)
@@ -204,17 +231,42 @@ public class GameManager : MonoBehaviour
         mainCamera.backgroundColor = colors[Mathf.Clamp(GameSession.SelectedStage, 0, colors.Length - 1)];
     }
 
+    public void PreviewSelectedStage()
+    {
+        if (gameStarted || gameOver) return;
+        ApplyStageAtmosphere();
+        FindAnyObjectByType<MapManager>()?.ResetForSelectedRun();
+        FindAnyObjectByType<CameraController>()?.PrepareForSelectedRun();
+    }
+
+    public void TryStartFromTap()
+    {
+        if (gameplayHub != null && !gameplayHub.IsPlayPage) return;
+        StartGame();
+    }
+
     public void StartGame()
     {
+        if (gameStarted || gameOver) return;
+        if (!runPrepared)
+        {
+            runPrepared = true;
+            FindAnyObjectByType<MapManager>()?.ResetForSelectedRun();
+            FindAnyObjectByType<CameraController>()?.PrepareForSelectedRun();
+            playerController?.RefreshCharacter();
+            ApplyStageAtmosphere();
+        }
         gameStarted = true;
         gameOver = false;
         paused = false;
-        startOverlay.SetActive(false);
+        gameplayHub?.HideGameplayHub();
+        if (pearlChip != null) pearlChip.SetActive(true);
+        if (pauseButton != null) pauseButton.gameObject.SetActive(true);
         if (tapToStartText != null) tapToStartText.gameObject.SetActive(false);
         if (GameSession.SpeedDashReady) speedDashUntil = Time.time + 18f;
         if (GameSession.PearlMagnetReady) magnetUntil = Time.time + 20f;
         if (GameSession.InvincibilityReady) invincibleUntil = Time.time + 10f;
-        ShowStatus(GameSession.Mode == FishGameMode.Tutorial ? "SWIPE UP TO MOVE FORWARD" : "GO!", 1.6f);
+        ShowStatus(GameSession.Mode == FishGameMode.Tutorial ? "STEP 1  TAP TO GO FORWARD - SWIPE TO TURN" : "GO!", 3.2f);
     }
 
     public void AddScore(int amount)
@@ -240,6 +292,43 @@ public class GameManager : MonoBehaviour
             case 1: speedDashUntil = Mathf.Max(speedDashUntil, Time.time) + 12f; ShowStatus("SPEED DASH", 1.2f); break;
             case 2: magnetUntil = Mathf.Max(magnetUntil, Time.time) + 15f; ShowStatus("PEARL MAGNET", 1.2f); break;
             case 3: invincibleUntil = Mathf.Max(invincibleUntil, Time.time) + 8f; ShowStatus("INVINCIBLE BUBBLE", 1.2f); break;
+        }
+        if (GameSession.Mode == FishGameMode.Tutorial && !tutorialBuffSeen)
+        {
+            tutorialBuffSeen = true;
+            ShowStatus("STEP 2  BUFFS HELP: SHIELD, DASH, MAGNET, INVINCIBLE", 4f);
+        }
+    }
+
+    public void NotifyPlayerMoved(Vector3 direction)
+    {
+        if (GameSession.Mode != FishGameMode.Tutorial || !gameStarted) return;
+        if (direction.z > 0f) tutorialForwardMoves++;
+        if (Mathf.Abs(direction.x) > 0f) tutorialSideMove = true;
+        if (tutorialForwardMoves == 3 && !tutorialSideMove)
+            ShowStatus("NOW SWIPE LEFT OR RIGHT TO CHANGE LANE", 2.8f);
+        else if (tutorialForwardMoves >= 3 && tutorialSideMove && !tutorialBuffSeen)
+            ShowStatus("STEP 2  FOLLOW THE PEARL PATTERN TO THE BUBBLE BUFF", 3.2f);
+    }
+
+    public void NotifyObstacleEncountered(SeaObstacleType type)
+    {
+        if (GameSession.Mode != FishGameMode.Tutorial) return;
+        tutorialObstaclesSeen++;
+        string effect = type switch
+        {
+            SeaObstacleType.Coral => "CORAL BLOCKS THE LANE - MOVE AROUND IT",
+            SeaObstacleType.Squid => "SQUID INK BLOCKS YOUR VIEW",
+            SeaObstacleType.Jellyfish => "JELLYFISH STUNS YOU",
+            SeaObstacleType.Pufferfish => "PUFFERFISH BLOCKS A LANE",
+            SeaObstacleType.Crab => "CRAB: TAP, TAP, THEN SWIPE",
+            _ => "SHARKS END THE RUN"
+        };
+        ShowStatus($"STEP 3  {effect}", 3f);
+        if (tutorialObstaclesSeen >= 4)
+        {
+            GameSession.MarkTutorialComplete();
+            ShowStatus("TUTORIAL COMPLETE - KEEP MOVING AND BEAT YOUR SCORE!", 4f);
         }
     }
 
@@ -314,9 +403,9 @@ public class GameManager : MonoBehaviour
     private void UpdateHud()
     {
         if (scoreText == null) return;
-        scoreText.text = $"SCORE  {score}";
-        pearlText.text = $"PEARLS  {GameSession.RunPearls}";
-        timerText.text = GameSession.Mode == FishGameMode.TimeAttack ? $"TIME  {Mathf.CeilToInt(remainingTime)}" : GameSession.Mode.ToString().ToUpperInvariant();
+        scoreText.text = score.ToString();
+        if (pearlText != null) pearlText.text = $"PEARL  {GameSession.PearlWallet + GameSession.RunPearls}";
+        timerText.text = GameSession.Mode == FishGameMode.TimeAttack ? $"TIME  {Mathf.CeilToInt(remainingTime)}" : "";
         string powers = "";
         if (shieldReady) powers += "SHIELD  ";
         if (HasSpeedDash) powers += "DASH  ";
@@ -339,6 +428,8 @@ public class GameManager : MonoBehaviour
         if (gameOver) return;
         gameOver = true;
         gameStarted = false;
+        if (pauseButton != null) pauseButton.gameObject.SetActive(false);
+        if (pearlChip != null) pearlChip.SetActive(false);
         playerController?.SetInputLocked(true);
         GameSession.BankRunPearls();
         if (GameSession.Mode == FishGameMode.Tutorial) GameSession.MarkTutorialComplete();
@@ -346,7 +437,7 @@ public class GameManager : MonoBehaviour
         int best = Mathf.Max(score, PlayerPrefs.GetInt(key, 0));
         PlayerPrefs.SetInt(key, best);
         PlayerPrefs.Save();
-        resultText.text = $"{reason}\n\nSCORE  {score}     BEST  {best}\nPEARLS BANKED  {GameSession.PearlWallet}";
+        resultText.text = $"{reason.ToUpperInvariant()}\n\nSCORE\n{score}\n\nBEST  {best}     PEARLS  {GameSession.PearlWallet}";
         gameOverOverlay.SetActive(true);
     }
 
@@ -367,6 +458,6 @@ public class GameManager : MonoBehaviour
     private void GoToMenu()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene("MainMenu");
+        SceneManager.LoadScene("Gameplay");
     }
 }

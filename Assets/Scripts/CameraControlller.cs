@@ -7,14 +7,15 @@ public class CameraController : MonoBehaviour
     public float minimumSpeed = 0.8f;
     public float catchUpSpeed = 3f;
     public float maxDistanceAhead = 5f;
-    public float horizontalOffset = 3.1f;
-
-    public float desiredPlayerScreenY = 0.35f;
+    public float desiredPlayerScreenY = 0.30f;
     public float smoothness = 3f;
+    public float cameraDistance = 11f;
+    public Vector3 isometricEuler = new Vector3(48f, -30f, 0f);
 
     private float currentSpeed;
     private Camera cameraComponent;
     private bool lastPortrait;
+    private float focusZ;
 
     void Start()
     {
@@ -22,12 +23,7 @@ public class CameraController : MonoBehaviour
         currentSpeed = minimumSpeed;
         cameraComponent = GetComponent<Camera>();
         ApplyOrientation();
-
-        if (player != null)
-        {
-            horizontalOffset =
-                transform.position.x - player.position.x;
-        }
+        SnapToFocus();
     }
 
     void ConfigureForMode()
@@ -54,7 +50,25 @@ public class CameraController : MonoBehaviour
     {
         if (cameraComponent == null) return;
         lastPortrait = Screen.height > Screen.width;
-        cameraComponent.fieldOfView = lastPortrait ? 67f : 55f;
+        cameraComponent.orthographic = true;
+        cameraComponent.orthographicSize = lastPortrait ? 7.25f : 4.75f;
+        transform.rotation = Quaternion.Euler(isometricEuler);
+    }
+
+    public void PrepareForSelectedRun()
+    {
+        ConfigureForMode();
+        currentSpeed = minimumSpeed;
+        ApplyOrientation();
+        SnapToFocus();
+    }
+
+    void SnapToFocus()
+    {
+        if (player == null) return;
+        focusZ = player.position.z + 2.2f;
+        Vector3 focus = new Vector3(0f, 0f, focusZ);
+        transform.position = focus - transform.forward * cameraDistance;
     }
 
     void Update()
@@ -102,30 +116,13 @@ public class CameraController : MonoBehaviour
             smoothness * Time.deltaTime
         );
 
-       //Camera automatically moves forward
-        transform.position +=
-            Vector3.forward * currentSpeed * Time.deltaTime;
+        focusZ += currentSpeed * Time.deltaTime;
+        focusZ = Mathf.Max(focusZ, player.position.z + 1.8f);
 
-        // Prevent the player from getting too far ahead
-        if (player.position.z - transform.position.z >
-            maxDistanceAhead)
-        {
-            Vector3 cameraPosition = transform.position;
-
-            cameraPosition.z =
-                player.position.z - maxDistanceAhead;
-
-            transform.position = cameraPosition;
-        }
-
-        // Follow the player's left and right movement
-        Vector3 finalCameraPosition = transform.position;
-
-        finalCameraPosition.x = Mathf.Lerp(
-            finalCameraPosition.x,
-            player.position.x + horizontalOffset,
-            smoothness * Time.deltaTime
-        );
-        transform.position = finalCameraPosition;
+        // Keep the reef centred like a Crossy Road camera. Lateral player hops do
+        // not drag the whole board sideways.
+        Vector3 focus = new Vector3(0f, 0f, focusZ);
+        Vector3 target = focus - transform.forward * cameraDistance;
+        transform.position = Vector3.Lerp(transform.position, target, smoothness * Time.deltaTime);
     }
 }

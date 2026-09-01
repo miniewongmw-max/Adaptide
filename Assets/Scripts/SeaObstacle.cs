@@ -2,6 +2,7 @@ using UnityEngine;
 
 public enum SeaObstacleType
 {
+    Coral,
     Squid,
     Crab,
     Jellyfish,
@@ -19,6 +20,7 @@ public class SeaObstacle : MonoBehaviour
         name = newType.ToString();
         Color color = type switch
         {
+            SeaObstacleType.Coral => new Color32(246, 121, 105, 255),
             SeaObstacleType.Squid => new Color32(116, 74, 159, 255),
             SeaObstacleType.Crab => new Color32(240, 91, 70, 255),
             SeaObstacleType.Jellyfish => new Color32(115, 211, 255, 255),
@@ -32,6 +34,7 @@ public class SeaObstacle : MonoBehaviour
     public bool Interact(PlayerController player)
     {
         if (GameManager.Instance == null) return true;
+        GameManager.Instance.NotifyObstacleEncountered(type);
         if (GameManager.Instance.IsInvincible || GameManager.Instance.TryUseShield())
         {
             Destroy(gameObject);
@@ -40,6 +43,9 @@ public class SeaObstacle : MonoBehaviour
 
         switch (type)
         {
+            case SeaObstacleType.Coral:
+                GameManager.Instance.ShowStatus("CORAL BLOCK! CHOOSE ANOTHER LANE", 1f);
+                return true;
             case SeaObstacleType.Squid:
                 GameManager.Instance.ShowInkCloud();
                 return true;
