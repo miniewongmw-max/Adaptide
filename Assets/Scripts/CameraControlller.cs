@@ -15,7 +15,7 @@ public class CameraController : MonoBehaviour
     [Tooltip("Constant forward camera drift while the player waits.")]
     public float minimumSpeed = 0.35f;
     [Tooltip("Maximum camera speed while catching a player who is moving ahead quickly.")]
-    public float catchUpSpeed = 1.6f;
+    public float catchUpSpeed = 3f;
     public float maxDistanceAhead = 5f;
 
     [Range(0.15f, 0.6f)]
@@ -54,6 +54,21 @@ public class CameraController : MonoBehaviour
     [Tooltip("Extra camera framing shift toward the right side of the map. This changes what the camera can see, not how tightly it follows the player.")]
     public float rightViewBias = 1.2f;
 
+    [Header("Right Edge Camera Resistance")]
+    [Tooltip("When the player reaches this X position while moving right, the camera begins following less and less.")]
+    public float rightEdgeSlowStartX = 1f;
+
+    [Range(0f, 1f)]
+    [Tooltip("How much horizontal follow remains at the far-right edge. Smaller = camera barely moves near the edge.")]
+    public float rightEdgeMinFollowStrength = 0.08f;
+
+    [Tooltip("After reaching the right side, the camera stays almost pinned while the player moves left until the player reaches this X.")]
+    public float rightEdgeReturnReleaseX = 1f;
+
+    [Range(0f, 1f)]
+    [Tooltip("How much the camera moves while returning left before Right Edge Return Release X is reached.")]
+    public float rightEdgeReturnFollowStrength = 0.10f;
+
     [Header("Camera Position")]
     [Tooltip("Forward checkpoint follow speed. Retreating never pulls the camera backward.")]
     public float longitudinalSmoothness = 4.5f;
@@ -71,6 +86,9 @@ public class CameraController : MonoBehaviour
     private int fastMoveChain;
     private float currentFastMoveBoost;
 
+    private float lastPlayerVisualX;
+    private bool rightEdgeReturnHold;
+
     void Start()
     {
         ConfigureForMode();
@@ -78,6 +96,9 @@ public class CameraController : MonoBehaviour
         cameraComponent = GetComponent<Camera>();
         ApplyOrientation();
         SnapToFocus();
+
+        if (player != null)
+            lastPlayerVisualX = player.position.x;
     }
 
     void ConfigureForMode()
@@ -88,17 +109,17 @@ public class CameraController : MonoBehaviour
         {
             case FishGameMode.Tutorial:
                 minimumSpeed = 0f;
-                catchUpSpeed = 1.25f;
+                catchUpSpeed = 2f;
                 break;
 
             case FishGameMode.TimeAttack:
                 minimumSpeed = 0.55f + stageBoost;
-                catchUpSpeed = 2.1f;
+                catchUpSpeed = 5f;
                 break;
 
             default:
                 minimumSpeed = 0.35f + stageBoost;
-                catchUpSpeed = 1.6f;
+                catchUpSpeed = 3f;
                 break;
         }
     }
@@ -123,6 +144,10 @@ public class CameraController : MonoBehaviour
         fastMoveChain = 0;
         currentFastMoveBoost = 0f;
         lastForwardMoveTime = -999f;
+        rightEdgeReturnHold = false;
+
+        if (player != null)
+            lastPlayerVisualX = player.position.x;
 
         ApplyOrientation();
         SnapToFocus();
@@ -218,27 +243,93 @@ public class CameraController : MonoBehaviour
             horizontalFollowMaxX
         );
 
-        // Follow left and right with different strengths.
-        // This is useful for the current isometric camera angle:
-        // left can stay subtle while right can follow more strongly.
-        float followStrength =
-            clampedPlayerX < 0f
-                ? leftFollowStrength
-                : rightFollowStrength;
+        float horizontalDelta = clampedPlayerX - lastPlayerVisualX;
+        bool movingRight = horizontalDelta > 0.001f;
+        bool movingLeft = horizontalDelta < -0.001f;
 
-        float softenedFocusX = clampedPlayerX * followStrength;
+        float softenedFocusX;
 
-        // Extra framing room on the right side.
-        // This is different from follow strength: it shifts the whole camera view
-        // farther right so the right-most lanes remain visible with the angled camera.
-        if (clampedPlayerX > 0f && horizontalFollowMaxX > 0f)
+        if (clampedPlayerX < 0f)
         {
-            float rightAmount = Mathf.Clamp01(
-                clampedPlayerX / horizontalFollowMaxX
+            rightEdgeReturnHold = false;
+            softenedFocusX = clampedPlayerX * leftFollowStrength;
+        }
+        else
+        {
+            float slowStart = Mathf.Clamp(
+                rightEdgeSlowStartX,
+                0f,
+                Mathf.Max(0.01f, horizontalFollowMaxX)
             );
 
-            softenedFocusX += rightViewBias * rightAmount;
+            float maxRight = Mathf.Max(slowStart + 0.01f, horizontalFollowMaxX);
+
+            if (movingRight && clampedPlayerX >= slowStart)
+                rightEdgeReturnHold = true;
+
+            if (movingLeft && rightEdgeReturnHold &&
+                clampedPlayerX <= rightEdgeReturnReleaseX)
+            {
+                rightEdgeReturnHold = false;
+            }
+
+            if (rightEdgeReturnHold && movingLeft &&
+                clampedPlayerX > rightEdgeReturnReleaseX)
+            {
+                float baseAtSlowStart = slowStart * rightFollowStrength;
+                float edgeDistance = maxRight - slowStart;
+
+                float edgeTarget =
+                    baseAtSlowStart +
+                    edgeDistance *
+                    ((rightFollowStrength + rightEdgeMinFollowStrength) * 0.5f);
+
+                float distanceBackFromEdge = maxRight - clampedPlayerX;
+
+                softenedFocusX =
+                    edgeTarget -
+                    distanceBackFromEdge * rightEdgeReturnFollowStrength;
+            }
+            else if (clampedPlayerX <= slowStart)
+            {
+                softenedFocusX = clampedPlayerX * rightFollowStrength;
+            }
+            else
+            {
+                float t = Mathf.InverseLerp(
+                    slowStart,
+                    maxRight,
+                    clampedPlayerX
+                );
+
+                float currentSlope = Mathf.Lerp(
+                    rightFollowStrength,
+                    rightEdgeMinFollowStrength,
+                    t
+                );
+
+                float baseAtSlowStart = slowStart * rightFollowStrength;
+                float extraDistance = clampedPlayerX - slowStart;
+
+                float averageSlope =
+                    (rightFollowStrength + currentSlope) * 0.5f;
+
+                softenedFocusX =
+                    baseAtSlowStart +
+                    extraDistance * averageSlope;
+            }
+
+            if (horizontalFollowMaxX > 0f)
+            {
+                float rightAmount = Mathf.Clamp01(
+                    clampedPlayerX / horizontalFollowMaxX
+                );
+
+                softenedFocusX += rightViewBias * rightAmount;
+            }
         }
+
+        lastPlayerVisualX = clampedPlayerX;
 
         return new Vector3(
             softenedFocusX,

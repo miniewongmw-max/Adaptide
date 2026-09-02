@@ -15034,12 +15034,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraController
   cameraPositionOffset: {x: 0, y: 0, z: 0}
-  cameraRotationOffset: {x: 0, y: 0, z: 0}
+  cameraRotationOffset: {x: -21, y: 10, z: 0}
   player: {fileID: 1898820546}
-  minimumSpeed: 1.5
+  minimumSpeed: 3
   catchUpSpeed: 9.8
   maxDistanceAhead: 5
-  desiredPlayerScreenY: 0.25
+  desiredPlayerScreenY: 0.2
   smoothness: 3
   fastMoveWindow: 0.28
   fastMoveBoost: 1.15
@@ -15049,8 +15049,12 @@ MonoBehaviour:
   horizontalFollowMaxX: 4
   lateralSmoothness: 10
   leftFollowStrength: 0.35
-  rightFollowStrength: 0.65
-  rightViewBias: 1.6
+  rightFollowStrength: 0.45
+  rightViewBias: 2.5
+  rightEdgeSlowStartX: 1
+  rightEdgeMinFollowStrength: 1
+  rightEdgeReturnReleaseX: 1
+  rightEdgeReturnFollowStrength: 0.1
   longitudinalSmoothness: 4.5
   cameraDistance: 18.3
   focusAheadOfPlayer: 0
