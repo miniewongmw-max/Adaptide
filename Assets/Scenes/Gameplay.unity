@@ -17319,6 +17319,26 @@ PrefabInstance:
       propertyPath: m_Name
       value: Turtlefbx
       objectReference: {fileID: 0}
+    - target: {fileID: 6317578925029434746, guid: 92659b5d51f91124eac3174504149a88, type: 3}
+      propertyPath: m_Materials.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 6317578925029434746, guid: 92659b5d51f91124eac3174504149a88, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 7dc9ee81fd8e16845ae9299fa2b8c5aa, type: 2}
+    - target: {fileID: 6317578925029434746, guid: 92659b5d51f91124eac3174504149a88, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 4acdaee98019e5c41967b79d748668c7, type: 2}
+    - target: {fileID: 8100320773420232829, guid: 92659b5d51f91124eac3174504149a88, type: 3}
+      propertyPath: m_Materials.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 8100320773420232829, guid: 92659b5d51f91124eac3174504149a88, type: 3}
+      propertyPath: 'm_Materials.Array.data[1]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 4acdaee98019e5c41967b79d748668c7, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
