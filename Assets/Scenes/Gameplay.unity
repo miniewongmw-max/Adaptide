@@ -14955,7 +14955,7 @@ MonoBehaviour:
   coralPrefab: {fileID: 1671162218962871013, guid: 8d6d2ce1082ef9e40b06266c4dd1a012, type: 3}
   squidPrefab: {fileID: 1671162218962871013, guid: 572d08f56b8cc5e4f9b067d548d38126, type: 3}
   crabPrefab: {fileID: 1671162218962871013, guid: af6d592c188948f4b8b5eccaca46c692, type: 3}
-  jellyfishPrefab: {fileID: 0}
+  jellyfishPrefab: {fileID: 1671162218962871013, guid: ce92043cc5250384fba2553b5333b210, type: 3}
   pufferfishPrefab: {fileID: 8236848495591922703, guid: c88dcde8c6ca0d44eb55a28d611ddad8, type: 3}
   sharkPrefab: {fileID: 1671162218962871013, guid: a1ffe6d7616959f46a2223357abe9b30, type: 3}
   collectiblePrefabs:
@@ -14987,7 +14987,7 @@ Transform:
   m_GameObject: {fileID: 1546273261}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.64286, y: 0.45, z: 0.64286}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
