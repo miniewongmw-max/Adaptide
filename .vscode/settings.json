@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "Adaptide.slnx"
+    "dotnet.defaultSolution": "Fishfish.slnx"
 }

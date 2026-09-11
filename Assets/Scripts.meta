@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<< HEAD
 guid: e210c383426c9d941a0e79183b94dcf0
+=======
+guid: c85483ae8e91b1a4494ae2ab8fe03ab6
+>>>>>>> origin/sq
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}
