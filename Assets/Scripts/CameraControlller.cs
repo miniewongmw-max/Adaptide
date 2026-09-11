@@ -117,6 +117,11 @@ public class CameraController : MonoBehaviour
                 catchUpSpeed = 5f;
                 break;
 
+            case FishGameMode.Riptide:
+                minimumSpeed = 0.45f + stageBoost;
+                catchUpSpeed = 3.6f;
+                break;
+
             default:
                 minimumSpeed = 0.35f + stageBoost;
                 catchUpSpeed = 3f;

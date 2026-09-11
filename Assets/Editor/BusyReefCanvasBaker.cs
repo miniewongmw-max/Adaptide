@@ -11,6 +11,7 @@ public static class BusyReefCanvasBaker
     public static void BakeGameplayScene()
     {
         EnsureCreamyFontAsset();
+        BusyReefRuntimeSetup.EnsureRoundedSpriteAsset();
         Scene scene = EditorSceneManager.OpenScene(GameplayScene, OpenSceneMode.Single);
         RemoveDuplicateEventSystems();
         DestroyCanvas("Busy Reef Gameplay HUD");
@@ -23,6 +24,7 @@ public static class BusyReefCanvasBaker
         MainMenuBehaviour builder = manager.gameObject.AddComponent<MainMenuBehaviour>();
         builder.BuildHubForEditor(true);
         Object.DestroyImmediate(builder);
+        BusyReefRuntimeSetup.EnsureAudioObject();
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, GameplayScene);

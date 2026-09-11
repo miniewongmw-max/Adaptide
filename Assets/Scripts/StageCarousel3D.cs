@@ -15,7 +15,7 @@ public class StageCarousel3D : MonoBehaviour, IBeginDragHandler, IDragHandler, I
     private float targetAngle;
     private float dragStartAngle;
     private bool tutorialLocked;
-    private const float Spacing = 120f;
+    private float Spacing => cards == null || cards.Length == 0 ? 120f : 360f / cards.Length;
 
     public int SelectedIndex => selectedIndex;
 

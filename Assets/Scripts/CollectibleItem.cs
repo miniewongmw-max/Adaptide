@@ -16,6 +16,13 @@ public class CollectibleItem : MonoBehaviour
     public CollectibleKind kind;
     private bool collected;
 
+    private void Start()
+    {
+        SeaLifeMotion motion = GetComponent<SeaLifeMotion>();
+        if (motion == null) motion = gameObject.AddComponent<SeaLifeMotion>();
+        motion.Configure(false, true);
+    }
+
     public void Collect()
     {
         if (collected) return;
@@ -33,11 +40,7 @@ public class CollectibleItem : MonoBehaviour
                 case CollectibleKind.InvincibilityBubble: GameManager.Instance.GrantPowerUp(3); break;
             }
         }
+        GameAudioManager.Play(kind == CollectibleKind.Pearl ? GameSfx.Pearl : GameSfx.PowerUp);
         Destroy(gameObject);
-    }
-
-    private void Update()
-    {
-        transform.Rotate(0f, 80f * Time.deltaTime, 0f, Space.World);
     }
 }

@@ -20,6 +20,13 @@ public class GameManager : MonoBehaviour
     public Transform player;
     public Camera mainCamera;
     public TMP_Text tapToStartText;
+    [Header("Equipment Icon Sprites")]
+    [Tooltip("Assign the turtle icon shown in the ready equipment row.")]
+    public Sprite turtleEquipmentIcon;
+    [Tooltip("Assign the seal icon shown in the ready equipment row.")]
+    public Sprite sealEquipmentIcon;
+    [Tooltip("Assign in order: Bubble Shield, Speed Dash, Pearl Magnet, Invincibility.")]
+    public Sprite[] powerEquipmentIcons = new Sprite[4];
     [Range(0.05f, 0.24f)]
     [Tooltip("Lose when the visible character centre retreats below this height, measured from the bottom.")]
     public float retreatLossScreenY = 0.17f;
@@ -41,6 +48,7 @@ public class GameManager : MonoBehaviour
     private GameObject pearlChip;
     private GameObject tutorialObjectivePanel;
     private TMP_Text resultText;
+    private readonly Image[] gameplayPowerIcons = new Image[4];
     private float remainingTime = 60f;
     private int score;
     private bool paused;
@@ -76,6 +84,7 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
+        GameAudioManager.EnsureInstance();
         playerController = player != null ? player.GetComponent<PlayerController>() : FindAnyObjectByType<PlayerController>();
         if (player == null && playerController != null) player = playerController.transform;
         if (mainCamera == null) mainCamera = Camera.main;
@@ -117,28 +126,34 @@ public class GameManager : MonoBehaviour
         GameplayGestureInput gestures = gestureSurface.gameObject.AddComponent<GameplayGestureInput>();
         gestures.player = playerController;
 
-        Image pearlPanel = OceanUI.CreatePanel("Pearls", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
+        Image pearlPanel = OceanUI.CreatePanel("Pearls", root, Color.clear);
+        pearlPanel.raycastTarget = false;
         pearlChip = pearlPanel.gameObject;
-        OceanUI.SetRect(pearlPanel.rectTransform, new Vector2(0.025f, 0.90f), new Vector2(0.30f, 0.975f), Vector2.zero, Vector2.zero);
-        pearlText = OceanUI.CreateText("PEARL  0", pearlPanel.transform, 36f, OceanUI.Sand, TextAlignmentOptions.Left);
+        OceanUI.SetRect(pearlPanel.rectTransform, new Vector2(0.025f, 0.885f), new Vector2(0.36f, 0.98f), Vector2.zero, Vector2.zero);
+        pearlText = OceanUI.CreateText("PEARL  0", pearlPanel.transform, 46f, OceanUI.Sand, TextAlignmentOptions.Left);
         pearlText.name = "Pearl Text";
         pearlChip.SetActive(false);
 
-        Image scoreChip = OceanUI.CreatePanel("Score", root, new Color(0.02f, 0.20f, 0.29f, 0.86f));
-        OceanUI.SetRect(scoreChip.rectTransform, new Vector2(0.70f, 0.90f), new Vector2(0.975f, 0.975f), Vector2.zero, Vector2.zero);
-        scoreText = OceanUI.CreateText("0", scoreChip.transform, 50f, OceanUI.Foam, TextAlignmentOptions.Right);
+        Image scoreChip = OceanUI.CreatePanel("Score", root, Color.clear);
+        scoreChip.raycastTarget = false;
+        OceanUI.SetRect(scoreChip.rectTransform, new Vector2(0.67f, 0.885f), new Vector2(0.975f, 0.98f), Vector2.zero, Vector2.zero);
+        scoreText = OceanUI.CreateText("0", scoreChip.transform, 84f, OceanUI.Foam, TextAlignmentOptions.Right);
         scoreText.name = "Score Text";
-        bestScoreText = OceanUI.CreateText("BEST  0", root, 25f, OceanUI.Sand, TextAlignmentOptions.Right);
+        bestScoreText = OceanUI.CreateText("BEST  0", root, 42f, OceanUI.Sand, TextAlignmentOptions.Right);
         bestScoreText.name = "Best Score";
         OceanUI.SetRect(bestScoreText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
         timerText = OceanUI.CreateText("", root, 28f, OceanUI.Coral, TextAlignmentOptions.Right);
         timerText.name = "Timer Text";
         OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.81f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
 
-        pauseButton = OceanUI.CreateButton("Pause", "PAUSE", root, OceanUI.Panel, TogglePause);
-        pauseButton.GetComponentInChildren<TMP_Text>().fontSize = 22f;
-        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.835f, 0.74f), new Vector2(0.975f, 0.81f), Vector2.zero, Vector2.zero);
+        pauseButton = OceanUI.CreateButton("Pause", "II", root, Color.clear, TogglePause);
+        TMP_Text pauseLabel = pauseButton.GetComponentInChildren<TMP_Text>();
+        pauseLabel.fontSize = 56f;
+        pauseLabel.color = OceanUI.Sand;
+        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.79f, 0.705f), new Vector2(0.975f, 0.825f), Vector2.zero, Vector2.zero);
         pauseButton.gameObject.SetActive(false);
+
+        CreateGameplayEquipmentIcons(root);
 
         powerText = OceanUI.CreateText("", root, 24f, OceanUI.Foam, TextAlignmentOptions.Left);
         powerText.name = "Power Text";
@@ -202,7 +217,24 @@ public class GameManager : MonoBehaviour
         pearlChip = FindDeepChild(root, "Pearls")?.gameObject;
         pearlText = ComponentAt<TMP_Text>(root, "Pearl Text");
         scoreText = ComponentAt<TMP_Text>(root, "Score Text");
+        Image pearlBackground = pearlChip != null ? pearlChip.GetComponent<Image>() : null;
+        if (pearlBackground != null)
+        {
+            pearlBackground.color = Color.clear;
+            pearlBackground.raycastTarget = false;
+            OceanUI.SetRect(pearlBackground.rectTransform, new Vector2(0.025f, 0.885f), new Vector2(0.36f, 0.98f), Vector2.zero, Vector2.zero);
+        }
+        if (pearlText != null) pearlText.fontSize = 46f;
+        Image scoreBackground = scoreText != null ? scoreText.transform.parent.GetComponent<Image>() : null;
+        if (scoreBackground != null)
+        {
+            scoreBackground.color = Color.clear;
+            scoreBackground.raycastTarget = false;
+            OceanUI.SetRect(scoreBackground.rectTransform, new Vector2(0.67f, 0.885f), new Vector2(0.975f, 0.98f), Vector2.zero, Vector2.zero);
+        }
+        if (scoreText != null) scoreText.fontSize = 84f;
         bestScoreText = ComponentAt<TMP_Text>(root, "Best Score");
+        if (bestScoreText != null) bestScoreText.fontSize = 42f;
         timerText = ComponentAt<TMP_Text>(root, "Timer Text");
         powerText = ComponentAt<TMP_Text>(root, "Power Text");
         statusText = ComponentAt<TMP_Text>(root, "Status Text");
@@ -215,6 +247,29 @@ public class GameManager : MonoBehaviour
         resultText = ComponentAt<TMP_Text>(canvas.transform, "Result Text");
         crabText = ComponentAt<TMP_Text>(root, "Crab Escape Text");
         inkCloud = ComponentAt<Image>(canvas.transform, "Ink Cloud");
+        EnsureGameplayEquipmentIcons(root);
+
+        Button[] themedButtons = canvas.GetComponentsInChildren<Button>(true);
+        Color[] buttonPalette = { OceanUI.Coral, OceanUI.Sand, OceanUI.Aqua };
+        for (int i = 0; i < themedButtons.Length; i++)
+        {
+            Image image = themedButtons[i].GetComponent<Image>();
+            if (image == null) continue;
+            if (themedButtons[i] == pauseButton)
+            {
+                image.color = Color.clear;
+                TMP_Text label = themedButtons[i].GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = "II";
+                    label.fontSize = 56f;
+                    label.color = OceanUI.Sand;
+                }
+                OceanUI.SetRect(themedButtons[i].GetComponent<RectTransform>(), new Vector2(0.79f, 0.705f), new Vector2(0.975f, 0.825f), Vector2.zero, Vector2.zero);
+                continue;
+            }
+            if (OceanUI.MakeRoundedIfDefault(image)) image.color = buttonPalette[i % buttonPalette.Length];
+        }
 
         GameplayGestureInput gestures = ComponentAt<GameplayGestureInput>(root, "Swipe Surface");
         if (gestures != null) gestures.player = playerController;
@@ -267,6 +322,7 @@ public class GameManager : MonoBehaviour
     {
         if (button == null) return;
         button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => GameAudioManager.Play(GameSfx.Button));
         button.onClick.AddListener(action);
     }
 
@@ -358,6 +414,7 @@ public class GameManager : MonoBehaviour
         {
             FishGameMode.Tutorial => "TUTORIAL | Slow current\nSwipe or use the arrows to move one tile. Avoid sea creatures and keep ahead of the camera.",
             FishGameMode.TimeAttack => "TIME ATTACK | 60 seconds\nMove forward quickly. Pearls are currency; starfish add bonus score.",
+            FishGameMode.Riptide => "RIPTIDE | Hard mode\nFace denser, faster traffic while pearl trails appear less often.",
             _ => "STANDARD | Endless reef\nSurvive, travel farther, collect pearls and beat your best score."
         };
         return mode;
@@ -739,6 +796,61 @@ public class GameManager : MonoBehaviour
         if (HasPearlMagnet) powers += "MAGNET  ";
         if (IsInvincible) powers += "INVINCIBLE";
         powerText.text = powers;
+        bool[] activePowers = { shieldReady, HasSpeedDash, HasPearlMagnet, IsInvincible };
+        for (int i = 0; i < gameplayPowerIcons.Length; i++)
+        {
+            Image icon = gameplayPowerIcons[i];
+            if (icon == null) continue;
+            icon.sprite = GetPowerEquipmentIcon(i);
+            icon.color = icon.sprite != null ? Color.white : EquipmentPlaceholderColor(i);
+            icon.gameObject.SetActive(gameStarted && activePowers[i]);
+        }
+    }
+
+    public Sprite GetCharacterEquipmentIcon()
+    {
+        return GameSession.EquippedCharacter == 1 ? sealEquipmentIcon : turtleEquipmentIcon;
+    }
+
+    public Sprite GetPowerEquipmentIcon(int index)
+    {
+        return powerEquipmentIcons != null && index >= 0 && index < powerEquipmentIcons.Length
+            ? powerEquipmentIcons[index]
+            : null;
+    }
+
+    public static Color EquipmentPlaceholderColor(int index)
+    {
+        return index % 3 == 0 ? OceanUI.Coral : index % 3 == 1 ? OceanUI.Sand : OceanUI.Aqua;
+    }
+
+    private void CreateGameplayEquipmentIcons(RectTransform root)
+    {
+        for (int i = 0; i < gameplayPowerIcons.Length; i++)
+            gameplayPowerIcons[i] = CreateEquipmentIcon(root, "Equipped Power " + (i + 1), i);
+    }
+
+    private void EnsureGameplayEquipmentIcons(Transform root)
+    {
+        for (int i = 0; i < gameplayPowerIcons.Length; i++)
+        {
+            gameplayPowerIcons[i] = ComponentAt<Image>(root, "Equipped Power " + (i + 1));
+            if (gameplayPowerIcons[i] == null)
+                gameplayPowerIcons[i] = CreateEquipmentIcon(root, "Equipped Power " + (i + 1), i);
+            gameplayPowerIcons[i].gameObject.SetActive(false);
+        }
+    }
+
+    private Image CreateEquipmentIcon(Transform root, string iconName, int index)
+    {
+        Image icon = OceanUI.CreatePanel(iconName, root, EquipmentPlaceholderColor(index));
+        icon.raycastTarget = false;
+        float width = 0.061f;
+        float gap = 0.007f;
+        float right = 0.975f - index * (width + gap);
+        OceanUI.SetRect(icon.rectTransform, new Vector2(right - width, 0.635f), new Vector2(right, 0.695f), Vector2.zero, Vector2.zero);
+        icon.preserveAspect = true;
+        return icon;
     }
 
     private void CheckPlayerOutsideCamera()
@@ -764,6 +876,7 @@ public class GameManager : MonoBehaviour
     public void GameOver(string reason)
     {
         if (gameOver || !gameStarted) return;
+        GameAudioManager.Play(GameSfx.GameOver);
         gameOver = true;
         gameStarted = false;
         if (pauseButton != null) pauseButton.gameObject.SetActive(false);

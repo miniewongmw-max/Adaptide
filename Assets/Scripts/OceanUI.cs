@@ -12,13 +12,14 @@ public static class OceanUI
     private const string ButtonPrefabPath = "UI/BusyReefButton";
 
     public static readonly Color Deep = new Color32(3, 31, 56, 255);
-    public static readonly Color Navy = new Color32(4, 52, 79, 245);
-    public static readonly Color Panel = new Color32(7, 79, 103, 232);
-    public static readonly Color Aqua = new Color32(73, 222, 205, 255);
+    public static readonly Color Navy = new Color32(35, 91, 122, 245);
+    public static readonly Color Panel = new Color32(104, 194, 224, 240);
+    public static readonly Color ButtonFrame = new Color32(116, 207, 235, 255);
+    public static readonly Color Aqua = new Color32(139, 231, 246, 255);
     public static readonly Color Foam = new Color32(231, 255, 244, 255);
-    public static readonly Color Sand = new Color32(255, 225, 156, 255);
-    public static readonly Color Coral = new Color32(255, 126, 103, 255);
-    public static readonly Color Muted = new Color32(155, 211, 211, 255);
+    public static readonly Color Sand = new Color32(255, 226, 126, 255);
+    public static readonly Color Coral = new Color32(255, 143, 183, 255);
+    public static readonly Color Muted = new Color32(185, 225, 239, 255);
 
     private static TMP_FontAsset creamyFont;
     private static Sprite roundedSprite;
@@ -88,6 +89,26 @@ public static class OceanUI
         return image;
     }
 
+    public static void MakeRounded(Image image)
+    {
+        if (image == null) return;
+        image.sprite = RoundedSprite();
+        image.type = Image.Type.Sliced;
+    }
+
+    // Runtime styling should improve the generated default UI without replacing
+    // artwork that a designer assigns later in the Canvas Inspector.
+    public static bool MakeRoundedIfDefault(Image image)
+    {
+        if (image == null) return false;
+        string spriteName = image.sprite != null ? image.sprite.name : string.Empty;
+        bool generatedOrBuiltIn = image.sprite == null || spriteName == "UISprite" || spriteName == "Background" ||
+            spriteName == "Knob" || spriteName == "BusyReefRounded" || spriteName == "Busy Reef Rounded Sprite";
+        if (!generatedOrBuiltIn) return false;
+        MakeRounded(image);
+        return true;
+    }
+
     public static TMP_Text CreateText(string text, Transform parent, float size, Color color,
         TextAlignmentOptions alignment = TextAlignmentOptions.Center)
     {
@@ -112,6 +133,7 @@ public static class OceanUI
 
     public static Button CreateButton(string name, string label, Transform parent, Color color, Action onClick)
     {
+        if (color == Panel) color = ButtonFrame;
         GameObject buttonPrefab = Resources.Load<GameObject>(ButtonPrefabPath);
         GameObject go = buttonPrefab != null
             ? UnityEngine.Object.Instantiate(buttonPrefab, parent, false)
@@ -120,11 +142,7 @@ public static class OceanUI
         Image image = go.GetComponent<Image>();
         if (image == null) image = go.AddComponent<Image>();
         image.color = color;
-        if (image.sprite == null)
-        {
-            image.sprite = RoundedSprite();
-            image.type = Image.Type.Sliced;
-        }
+        MakeRounded(image);
         Button button = go.GetComponent<Button>();
         if (button == null) button = go.AddComponent<Button>();
         ColorBlock colors = button.colors;
@@ -134,6 +152,7 @@ public static class OceanUI
         colors.selectedColor = Color.white;
         button.colors = colors;
         button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => GameAudioManager.Play(GameSfx.Button));
         if (onClick != null) button.onClick.AddListener(() => onClick());
         TMP_Text buttonLabel = go.GetComponentInChildren<TMP_Text>(true);
         if (buttonLabel == null) buttonLabel = CreateText(label, image.transform, 40f, Deep);
@@ -219,8 +238,10 @@ public static class OceanUI
     private static Sprite RoundedSprite()
     {
         if (roundedSprite != null) return roundedSprite;
-        const int size = 32;
-        const float radius = 9f;
+        roundedSprite = Resources.Load<Sprite>("UI/BusyReefRounded");
+        if (roundedSprite != null) return roundedSprite;
+        const int size = 64;
+        const float radius = 29f;
         Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
         {
             name = "Busy Reef Rounded Panel",
@@ -241,7 +262,7 @@ public static class OceanUI
         texture.SetPixels32(pixels);
         texture.Apply(false, true);
         roundedSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f, 0,
-            SpriteMeshType.FullRect, new Vector4(10f, 10f, 10f, 10f));
+            SpriteMeshType.FullRect, new Vector4(29f, 29f, 29f, 29f));
         roundedSprite.name = "Busy Reef Rounded Sprite";
         return roundedSprite;
     }

@@ -99,5 +99,6 @@ public class AnimalTrafficLane : MonoBehaviour
         MovingSeaObstacle movement = animal.GetComponent<MovingSeaObstacle>();
         if (movement == null) movement = animal.AddComponent<MovingSeaObstacle>();
         movement.Configure(direction, speed, offscreenDistance + 2f);
+        animal.GetComponent<SeaLifeMotion>()?.Configure(true);
     }
 }

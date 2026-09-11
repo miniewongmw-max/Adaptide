@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 public enum SeaObstacleType
@@ -14,6 +15,7 @@ public class SeaObstacle : MonoBehaviour
 {
     public SeaObstacleType type;
     private float nextMovingHitTime;
+    private bool sharkBiting;
 
     public void Initialize(SeaObstacleType newType)
     {
@@ -24,6 +26,10 @@ public class SeaObstacle : MonoBehaviour
     {
         type = newType;
         name = newType.ToString();
+        SeaLifeMotion motion = GetComponent<SeaLifeMotion>();
+        if (motion == null) motion = gameObject.AddComponent<SeaLifeMotion>();
+        motion.Configure(GetComponent<MovingSeaObstacle>() != null);
+        if (type == SeaObstacleType.Coral) ConfigureSingleTileCoralCollider();
         if (!applyFallbackTint) return;
         Color color = type switch
         {
@@ -41,10 +47,41 @@ public class SeaObstacle : MonoBehaviour
     public bool Interact(PlayerController player)
     {
         if (GameManager.Instance == null) return true;
+        SeaLifeMotion motion = GetComponent<SeaLifeMotion>();
+        switch (type)
+        {
+            case SeaObstacleType.Crab:
+                motion?.Shake(0.9f, 2.1f);
+                break;
+            case SeaObstacleType.Coral:
+                motion?.Shake(0.8f, 1.8f);
+                break;
+            case SeaObstacleType.Squid:
+            case SeaObstacleType.Pufferfish:
+                motion?.SpinOnce(0.78f, 1f);
+                break;
+            default:
+                motion?.ReactTo(player.transform);
+                break;
+        }
+        GameAudioManager.Play(GameSfx.Obstacle);
         GameManager.Instance.NotifyObstacleEncountered(type);
         if (GameManager.Instance.IsInvincible || GameManager.Instance.TryUseShield())
         {
-            Destroy(gameObject);
+            Collider[] colliders = GetComponentsInChildren<Collider>(true);
+            bool[] colliderStates = new bool[colliders.Length];
+            for (int i = 0; i < colliders.Length; i++)
+            {
+                colliderStates[i] = colliders[i].enabled;
+                colliders[i].enabled = false;
+            }
+
+            // Sharks are living traffic, so a protected collision lets the player
+            // pass but never removes the shark from its lane.
+            if (type == SeaObstacleType.Shark)
+                StartCoroutine(RestoreCollision(colliders, colliderStates, 0.75f));
+            else
+                Destroy(gameObject, 0.45f);
             return false;
         }
 
@@ -68,11 +105,77 @@ public class SeaObstacle : MonoBehaviour
                 return true;
             case SeaObstacleType.Shark:
                 if (GameManager.Instance.RetryTutorialSharkLesson()) return true;
-                GameManager.Instance.GameOver("Caught by a shark");
+                if (!sharkBiting) StartCoroutine(SharkBite(player));
                 return true;
             default:
                 return true;
         }
+    }
+
+    private IEnumerator SharkBite(PlayerController player)
+    {
+        sharkBiting = true;
+        MovingSeaObstacle traffic = GetComponent<MovingSeaObstacle>();
+        if (traffic != null) traffic.enabled = false;
+
+        player.SetInputLocked(true);
+        SeaLifeMotion motion = GetComponent<SeaLifeMotion>();
+        if (motion != null) motion.enabled = false;
+        GameManager.Instance.ShowStatus("SHARK ATTACK!", 0.7f);
+
+        Vector3 startPosition = transform.position;
+        Quaternion startRotation = transform.rotation;
+        Vector3 toPlayer = player.transform.position - startPosition;
+        toPlayer.y = 0f;
+        Vector3 biteDirection = toPlayer.sqrMagnitude > 0.001f ? toPlayer.normalized : transform.forward;
+
+        // The imported shark mesh faces local -Z. The 180-degree yaw makes its
+        // head, rather than its tail, point at the player before the bite lunge.
+        Quaternion biteRotation = Quaternion.LookRotation(biteDirection, Vector3.up)
+            * Quaternion.Euler(0f, 180f, 0f);
+        float lungeDistance = Mathf.Min(0.72f, toPlayer.magnitude * 0.62f);
+        Vector3 bitePosition = startPosition + biteDirection * lungeDistance;
+        const float biteDuration = 0.58f;
+        float elapsed = 0f;
+        while (elapsed < biteDuration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / biteDuration);
+            float eased = 1f - Mathf.Pow(1f - t, 3f);
+            transform.rotation = Quaternion.Slerp(startRotation, biteRotation, eased);
+            // Upward-only arc keeps the shark visibly above the seabed.
+            transform.position = Vector3.Lerp(startPosition, bitePosition, eased)
+                + Vector3.up * (Mathf.Sin(t * Mathf.PI) * 0.14f);
+            yield return null;
+        }
+        transform.position = bitePosition;
+        transform.rotation = biteRotation;
+        yield return new WaitForSeconds(0.12f);
+        if (GameManager.Instance != null && GameManager.Instance.gameStarted && !GameManager.Instance.gameOver)
+            GameManager.Instance.GameOver("Caught by a shark");
+    }
+
+    private void ConfigureSingleTileCoralCollider()
+    {
+        BoxCollider tileCollider = GetComponent<BoxCollider>();
+        if (tileCollider == null) tileCollider = gameObject.AddComponent<BoxCollider>();
+
+        // Disable imported mesh/child colliders: their renderer-sized bounds can
+        // spill into neighbouring lanes even when the coral is placed on one tile.
+        foreach (Collider collider in GetComponentsInChildren<Collider>(true))
+            collider.enabled = collider == tileCollider;
+
+        tileCollider.isTrigger = false;
+        tileCollider.center = new Vector3(0f, 0.22f, 0f);
+        tileCollider.size = new Vector3(0.70f, 1.35f, 0.70f);
+        tileCollider.enabled = true;
+    }
+
+    private IEnumerator RestoreCollision(Collider[] colliders, bool[] colliderStates, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        for (int i = 0; i < colliders.Length; i++)
+            if (colliders[i] != null) colliders[i].enabled = colliderStates[i];
     }
 
     private void OnTriggerEnter(Collider other)

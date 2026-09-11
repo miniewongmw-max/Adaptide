@@ -12,6 +12,8 @@ public class PlayerController : MonoBehaviour
 
     public float tileSize = 1f;
     public float moveDuration = 0.12f;
+    [Tooltip("Small hop height used to make each tile move readable.")]
+    public float moveHopHeight = 0.18f;
     public float minX = -4f;
     public float maxX = 4f;
     public MapManager mapManager;
@@ -105,6 +107,8 @@ public class PlayerController : MonoBehaviour
             }
 
             Vector3 start = transform.position;
+            Quaternion startRotation = transform.rotation;
+            Quaternion targetRotation = Quaternion.LookRotation(direction, Vector3.up);
             float timer = 0f;
             while (timer < moveDuration)
             {
@@ -116,10 +120,14 @@ public class PlayerController : MonoBehaviour
                 }
                 timer += Time.deltaTime;
                 float t = Mathf.Clamp01(timer / moveDuration);
-                transform.position = Vector3.Lerp(start, target, 1f - Mathf.Pow(1f - t, 3f));
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                transform.position = Vector3.Lerp(start, target, eased) + Vector3.up * (Mathf.Sin(t * Mathf.PI) * moveHopHeight);
+                transform.rotation = Quaternion.Slerp(startRotation, targetRotation, eased);
                 yield return null;
             }
             transform.position = target;
+            transform.rotation = targetRotation;
+            GameAudioManager.Play(GameSfx.Move);
             GameManager.Instance?.NotifyPlayerMoved(direction);
             cameraController?.NotifyPlayerMoved(direction);
             if (direction.z > 0f && transform.position.z > furthestScoredZ + 0.01f)
@@ -135,6 +143,16 @@ public class PlayerController : MonoBehaviour
 
     private SeaObstacle FindObstacle(Vector3 futurePosition)
     {
+        // Coral is a grid blocker. Check its tile directly so its visual shake can
+        // never make a later collision miss or block a neighbouring tile.
+        foreach (SeaObstacle candidate in FindObjectsByType<SeaObstacle>())
+        {
+            if (candidate.type != SeaObstacleType.Coral || !candidate.isActiveAndEnabled) continue;
+            Vector3 delta = candidate.transform.position - futurePosition;
+            if (Mathf.Abs(delta.x) <= tileSize * 0.42f && Mathf.Abs(delta.z) <= tileSize * 0.42f)
+                return candidate;
+        }
+
         Vector3 checkPosition = futurePosition + Vector3.up * 0.75f;
         Vector3 halfExtents = new Vector3(0.4f, 0.75f, 0.4f);
         int mask = obstacleLayer.value == 0 ? Physics.AllLayers : obstacleLayer.value;
@@ -197,6 +215,7 @@ public class PlayerController : MonoBehaviour
             model.transform.localRotation = Quaternion.identity;
             foreach (Collider modelCollider in model.GetComponentsInChildren<Collider>(true)) modelCollider.enabled = false;
             foreach (Rigidbody modelBody in model.GetComponentsInChildren<Rigidbody>(true)) modelBody.isKinematic = true;
+            EnableCharacterShadows();
             return;
         }
         if (selectedCharacter == 1)
@@ -215,6 +234,16 @@ public class PlayerController : MonoBehaviour
         {
             if (renderer.material.HasProperty("_BaseColor")) renderer.material.SetColor("_BaseColor", color);
             else if (renderer.material.HasProperty("_Color")) renderer.material.color = color;
+        }
+        EnableCharacterShadows();
+    }
+
+    private void EnableCharacterShadows()
+    {
+        foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
+        {
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            renderer.receiveShadows = true;
         }
     }
 

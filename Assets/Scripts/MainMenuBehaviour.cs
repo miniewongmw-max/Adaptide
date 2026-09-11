@@ -13,9 +13,13 @@ public class MainMenuBehaviour : MonoBehaviour
     private readonly List<Image> navTiles = new List<Image>();
     private RectTransform pageArea;
     private TMP_Text shopWalletText, homeText, stageTitle, stageDescription, feedback, characterFeedback, touchLabel;
+    private TMP_Text soundLabel, bgmValueLabel, sfxValueLabel;
+    private Slider bgmSlider, sfxSlider;
+    private GameObject aboutPanel;
     private GameObject powerShop, characterShop;
     private StageCarousel3D carousel;
     private Button stagePrevious, stageNext;
+    private readonly Image[] readyEquipmentIcons = new Image[5];
     private Coroutine slideRoutine;
     private int currentPage = 2;
     private RectTransform navigationBar;
@@ -31,12 +35,14 @@ public class MainMenuBehaviour : MonoBehaviour
     private static readonly string[] PowerNames = { "Bubble Shield", "Speed Dash", "Pearl Magnet", "Invincibility" };
     private static readonly string[] PowerInfo = { "Blocks one obstacle", "Moves forward twice", "Pulls nearby pearls", "Ignores hazards briefly" };
     private static readonly int[] PowerCosts = { 15, 10, 50, 80 };
-    private static readonly FishGameMode[] CarouselModes = { FishGameMode.Tutorial, FishGameMode.Standard, FishGameMode.TimeAttack };
+    private static readonly FishGameMode[] CarouselModes =
+        { FishGameMode.Tutorial, FishGameMode.Standard, FishGameMode.TimeAttack, FishGameMode.Riptide };
     private static readonly string[] ModeDescriptions =
     {
         "Learn movement, pearls, animals and every buff step by step",
         "Endless reef traffic - survive and set a new best score",
-        "Cross as many animal lanes as possible before time runs out"
+        "Cross as many animal lanes as possible before time runs out",
+        "Hard mode - denser, faster animal traffic with fewer pearls"
     };
 
     private void Start()
@@ -81,6 +87,7 @@ public class MainMenuBehaviour : MonoBehaviour
         pages.Add(BuildSettingsPage());
         adaptive.carousel = carousel;
         BuildNavigation(root);
+        ApplyEditableVisualTheme(root);
         Canvas.ForceUpdateCanvases();
         lastLandscape = Screen.width > Screen.height;
         ApplyHubOrientation();
@@ -118,8 +125,15 @@ public class MainMenuBehaviour : MonoBehaviour
         feedback = ComponentAt<TMP_Text>(root, "Shop Feedback");
         characterFeedback = ComponentAt<TMP_Text>(root, "Character Feedback");
         touchLabel = ComponentAt<TMP_Text>(root, "Touch Pad Value");
+        soundLabel = ComponentAt<TMP_Text>(root, "Sound Value");
+        bgmValueLabel = ComponentAt<TMP_Text>(root, "BGM Value");
+        sfxValueLabel = ComponentAt<TMP_Text>(root, "SFX Value");
+        bgmSlider = ComponentAt<Slider>(root, "BGM Slider");
+        sfxSlider = ComponentAt<Slider>(root, "SFX Slider");
+        aboutPanel = FindDeepChild(root, "About Panel")?.gameObject;
         powerShop = FindDeepChild(root, "Power-up Stock")?.gameObject;
         characterShop = FindDeepChild(root, "Character Stock")?.gameObject;
+        EnsureReadyEquipmentIcons(root);
 
         pages.Clear();
         AddPage(root, "Mode Selection Page");
@@ -164,8 +178,14 @@ public class MainMenuBehaviour : MonoBehaviour
         Transform characterPage = FindDeepChild(root, "Character Selection Page");
         WireButton(ComponentAt<Button>(FindDeepChild(characterPage, "TURTLE"), "Choose"), () => SelectCharacter(0));
         WireButton(ComponentAt<Button>(FindDeepChild(characterPage, "SEAL"), "Choose"), () => SelectCharacter(1));
-        WireButton(ComponentAt<Button>(root, "SOUND Toggle"), () => AudioListener.volume = AudioListener.volume > 0f ? 0f : 1f);
+        WireButton(ComponentAt<Button>(root, "SOUND Toggle"), () => { GameAudioManager.ToggleMute(); RefreshAll(); });
         WireButton(ComponentAt<Button>(root, "TOUCH PAD Toggle"), ToggleTouch);
+        WireButton(ComponentAt<Button>(root, "ABOUT Open"), () => SetAboutVisible(true));
+        WireButton(ComponentAt<Button>(aboutPanel != null ? aboutPanel.transform : null, "ABOUT Close"), () => SetAboutVisible(false));
+        WireSlider(bgmSlider, value => { GameAudioManager.SetBgmVolume(value); RefreshAll(); });
+        WireSlider(sfxSlider, value => { GameAudioManager.SetSfxVolume(value); RefreshAll(); });
+        ApplyEditableVisualTheme(root);
+        SetAboutVisible(false);
 
         AdaptiveUILayout adaptive = root.GetComponent<AdaptiveUILayout>();
         if (adaptive != null)
@@ -182,6 +202,56 @@ public class MainMenuBehaviour : MonoBehaviour
         SetRestingPageVisibility();
         ShopCategory(true);
         RefreshAll();
+    }
+
+    private void ApplyEditableVisualTheme(Transform root)
+    {
+        Color[] palette = { OceanUI.Coral, OceanUI.Sand, OceanUI.Aqua };
+        Button[] buttons = root.GetComponentsInChildren<Button>(true);
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            Image image = buttons[i].GetComponent<Image>();
+            if (image == null) continue;
+            if (OceanUI.MakeRoundedIfDefault(image)) image.color = palette[i % palette.Length];
+        }
+
+        foreach (Slider slider in root.GetComponentsInChildren<Slider>(true))
+        {
+            Image track = slider.GetComponent<Image>();
+            if (track != null)
+            {
+                if (OceanUI.MakeRoundedIfDefault(track)) track.color = OceanUI.Coral;
+            }
+            Image fill = slider.fillRect != null ? slider.fillRect.GetComponent<Image>() : null;
+            if (fill != null)
+            {
+                if (OceanUI.MakeRoundedIfDefault(fill)) fill.color = OceanUI.Aqua;
+            }
+            Image handle = slider.handleRect != null ? slider.handleRect.GetComponent<Image>() : null;
+            if (handle != null)
+            {
+                if (OceanUI.MakeRoundedIfDefault(handle)) handle.color = OceanUI.Sand;
+            }
+        }
+
+        Image edgeFill = navigationBleed != null ? navigationBleed.GetComponent<Image>() : null;
+        if (edgeFill != null) edgeFill.color = OceanUI.Panel;
+
+        // Opaque menu pages use the pastel palette instead of deep-blue cards.
+        // The play page stays transparent so the live reef remains visible.
+        for (int pageIndex = 0; pageIndex < pages.Count; pageIndex++)
+        {
+            if (pageIndex == 2 || pages[pageIndex] == null) continue;
+            int panelIndex = pageIndex;
+            foreach (Image panel in pages[pageIndex].GetComponentsInChildren<Image>(true))
+            {
+                if (panel.name == "Opaque Page Background" || panel.GetComponent<Button>() != null ||
+                    panel.GetComponentInParent<Slider>() != null) continue;
+                if (OceanUI.MakeRoundedIfDefault(panel)) panel.color = palette[panelIndex++ % palette.Length];
+            }
+            foreach (TMP_Text label in pages[pageIndex].GetComponentsInChildren<TMP_Text>(true))
+                label.color = OceanUI.Deep;
+        }
     }
 
     private void AddPage(Transform root, string objectName)
@@ -218,7 +288,15 @@ public class MainMenuBehaviour : MonoBehaviour
     {
         if (button == null) return;
         button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(() => GameAudioManager.Play(GameSfx.Button));
         if (action != null) button.onClick.AddListener(action);
+    }
+
+    private static void WireSlider(Slider slider, UnityEngine.Events.UnityAction<float> action)
+    {
+        if (slider == null) return;
+        slider.onValueChanged.RemoveAllListeners();
+        if (action != null) slider.onValueChanged.AddListener(action);
     }
 
     private void Update()
@@ -257,6 +335,7 @@ public class MainMenuBehaviour : MonoBehaviour
         homeText = OceanUI.CreateText("", page, 28f, OceanUI.Muted);
         homeText.name = "Home Summary";
         OceanUI.SetRect(homeText.rectTransform, new Vector2(.08f, .40f), new Vector2(.92f, .54f), Vector2.zero, Vector2.zero);
+        CreateReadyEquipmentIcons(page);
         TMP_Text begin = OceanUI.CreateText("TOUCH ANYWHERE TO BEGIN", page, 43f, OceanUI.Sand);
         OceanUI.SetRect(begin.rectTransform, new Vector2(.12f, .18f), new Vector2(.88f, .32f), Vector2.zero, Vector2.zero);
         return page;
@@ -270,11 +349,11 @@ public class MainMenuBehaviour : MonoBehaviour
         GameObject holder = OceanUI.CreateObject("3D Circular Mode Carousel", page);
         OceanUI.SetRect(holder.GetComponent<RectTransform>(), new Vector2(.06f, .30f), new Vector2(.94f, .77f), Vector2.zero, Vector2.zero);
         carousel = holder.AddComponent<StageCarousel3D>();
-        RectTransform[] cards = new RectTransform[3];
-        Color[] colors = { OceanUI.Aqua, OceanUI.Sand, new Color32(76, 116, 177, 255) };
-        for (int i = 0; i < 3; i++)
+        RectTransform[] cards = new RectTransform[CarouselModes.Length];
+        Color[] colors = { OceanUI.Aqua, OceanUI.Sand, OceanUI.Coral, new Color32(108, 204, 239, 255) };
+        for (int i = 0; i < CarouselModes.Length; i++)
         {
-            string modeName = CarouselModes[i] == FishGameMode.TimeAttack ? "TIME ATTACK" : CarouselModes[i].ToString().ToUpperInvariant();
+            string modeName = DisplayModeName(CarouselModes[i]);
             Image card = OceanUI.CreatePanel(modeName, holder.transform, colors[i]);
             card.gameObject.AddComponent<Button>();
             cards[i] = card.rectTransform;
@@ -383,14 +462,107 @@ public class MainMenuBehaviour : MonoBehaviour
     {
         RectTransform page = Page("Settings Page");
         AddOpaquePageBackground(page, new Color32(3, 39, 61, 255));
-        AddTitle(page, "SETTINGS", "Controls adapt to portrait and landscape");
-        Setting(page, "SOUND", "ON / OFF", .62f, () => AudioListener.volume = AudioListener.volume > 0f ? 0f : 1f);
-        Button touch = Setting(page, "TOUCH PAD", "", .45f, ToggleTouch);
+        AddTitle(page, "SETTINGS", "Audio and controls are saved automatically");
+        Button sound = Setting(page, "SOUND", "", .66f, () => { GameAudioManager.ToggleMute(); RefreshAll(); });
+        soundLabel = sound.GetComponentInChildren<TMP_Text>();
+        soundLabel.name = "Sound Value";
+        bgmSlider = CreateVolumeSetting(page, "BGM", "BGM Slider", "BGM Value", .51f, GameAudioManager.BgmVolume, out bgmValueLabel);
+        sfxSlider = CreateVolumeSetting(page, "SFX", "SFX Slider", "SFX Value", .37f, GameAudioManager.SfxVolume, out sfxValueLabel);
+        bgmSlider.onValueChanged.AddListener(value => { GameAudioManager.SetBgmVolume(value); RefreshAll(); });
+        sfxSlider.onValueChanged.AddListener(value => { GameAudioManager.SetSfxVolume(value); RefreshAll(); });
+        Button touch = Setting(page, "TOUCH PAD", "", .22f, ToggleTouch);
         touchLabel = touch.GetComponentInChildren<TMP_Text>();
         touchLabel.name = "Touch Pad Value";
-        TMP_Text note = OceanUI.CreateText("Tap anywhere to move forward. Swipe for a direction. The touch pad is OFF by default in desktop EXE builds.", page, 29f, OceanUI.Muted);
-        OceanUI.SetRect(note.rectTransform, new Vector2(.10f, .18f), new Vector2(.90f, .39f), Vector2.zero, Vector2.zero);
+        Button about = OceanUI.CreateButton("ABOUT Open", "ABOUT", page, OceanUI.ButtonFrame, () => SetAboutVisible(true));
+        OceanUI.SetRect(about.GetComponent<RectTransform>(), new Vector2(.28f, .07f), new Vector2(.72f, .17f), Vector2.zero, Vector2.zero);
+        BuildAboutPanel(page);
         return page;
+    }
+
+    private Slider CreateVolumeSetting(Transform parent, string label, string sliderName,
+        string valueName, float y, float initialValue, out TMP_Text valueLabel)
+    {
+        TMP_Text name = OceanUI.CreateText(label, parent, 34f, OceanUI.Foam, TextAlignmentOptions.Left);
+        OceanUI.SetRect(name.rectTransform, new Vector2(.10f, y), new Vector2(.30f, y + .10f), Vector2.zero, Vector2.zero);
+
+        Image track = OceanUI.CreatePanel(sliderName, parent, new Color32(42, 130, 153, 255));
+        OceanUI.MakeRounded(track);
+        OceanUI.SetRect(track.rectTransform, new Vector2(.31f, y + .025f), new Vector2(.78f, y + .075f), Vector2.zero, Vector2.zero);
+        Slider slider = track.gameObject.AddComponent<Slider>();
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+
+        Image fill = OceanUI.CreatePanel("Fill", track.transform, OceanUI.Aqua);
+        OceanUI.MakeRounded(fill);
+        OceanUI.SetRect(fill.rectTransform, Vector2.zero, Vector2.one, new Vector2(8f, 8f), new Vector2(-8f, -8f));
+        Image handle = OceanUI.CreatePanel("Handle", track.transform, OceanUI.Sand);
+        OceanUI.MakeRounded(handle);
+        RectTransform handleRect = handle.rectTransform;
+        handleRect.anchorMin = handleRect.anchorMax = new Vector2(0.5f, 0.5f);
+        handleRect.sizeDelta = new Vector2(54f, 68f);
+        slider.fillRect = fill.rectTransform;
+        slider.handleRect = handleRect;
+        slider.targetGraphic = handle;
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.SetValueWithoutNotify(initialValue);
+
+        valueLabel = OceanUI.CreateText("", parent, 28f, OceanUI.Sand, TextAlignmentOptions.Right);
+        valueLabel.name = valueName;
+        OceanUI.SetRect(valueLabel.rectTransform, new Vector2(.79f, y), new Vector2(.91f, y + .10f), Vector2.zero, Vector2.zero);
+        return slider;
+    }
+
+    private void BuildAboutPanel(RectTransform page)
+    {
+        Image panel = OceanUI.CreatePanel("About Panel", page, new Color32(5, 51, 72, 255));
+        OceanUI.Stretch(panel.rectTransform, 0f);
+        aboutPanel = panel.gameObject;
+
+        TMP_Text title = OceanUI.CreateText("ABOUT BUSY REEF", panel.transform, 48f, OceanUI.Sand);
+        OceanUI.SetRect(title.rectTransform, new Vector2(.06f, .87f), new Vector2(.72f, .98f), Vector2.zero, Vector2.zero);
+        Button close = OceanUI.CreateButton("ABOUT Close", "BACK", panel.transform, OceanUI.ButtonFrame, () => SetAboutVisible(false));
+        OceanUI.SetRect(close.GetComponent<RectTransform>(), new Vector2(.75f, .88f), new Vector2(.94f, .97f), Vector2.zero, Vector2.zero);
+
+        Image viewportImage = OceanUI.CreatePanel("About Scroll View", panel.transform, new Color32(11, 76, 96, 255));
+        OceanUI.SetRect(viewportImage.rectTransform, new Vector2(.06f, .06f), new Vector2(.94f, .85f), Vector2.zero, Vector2.zero);
+        Mask mask = viewportImage.gameObject.AddComponent<Mask>();
+        mask.showMaskGraphic = true;
+        ScrollRect scroll = viewportImage.gameObject.AddComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.inertia = true;
+        scroll.scrollSensitivity = 45f;
+        scroll.viewport = viewportImage.rectTransform;
+
+        RectTransform content = OceanUI.CreateObject("About Scroll Content", viewportImage.transform).GetComponent<RectTransform>();
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = new Vector2(1f, 1f);
+        content.pivot = new Vector2(.5f, 1f);
+        content.anchoredPosition = Vector2.zero;
+        content.sizeDelta = new Vector2(0f, 1700f);
+        scroll.content = content;
+
+        const string template =
+            "WHAT IS BUSY REEF?\n" +
+            "[Write a short description of the game, its goal, and the underwater journey here.]\n\n" +
+            "TEAM MEMBERS & ROLES\n" +
+            "1. [Member One] — [Role / responsibilities]\n\n" +
+            "2. [Member Two] — [Role / responsibilities]\n\n" +
+            "3. [Member Three] — [Role / responsibilities]\n\n" +
+            "4. [Member Four] — [Role / responsibilities]\n\n" +
+            "THIRD-PARTY ASSETS\n" +
+            "• [Asset name] — [Creator / source / licence]\n" +
+            "• [Asset name] — [Creator / source / licence]\n" +
+            "• Creamy Chicken font — [Add creator and licence]\n\n" +
+            "TOOLS & ACKNOWLEDGEMENTS\n" +
+            "[List software, libraries, audio, tutorials, and other credits.]\n\n" +
+            "VERSION\n" +
+            "[Version number and date]";
+        TMP_Text body = OceanUI.CreateText(template, content, 30f, OceanUI.Foam, TextAlignmentOptions.TopLeft);
+        body.name = "About Content Text";
+        OceanUI.Stretch(body.rectTransform, 34f);
+        body.overflowMode = TextOverflowModes.Overflow;
+        aboutPanel.SetActive(false);
     }
 
     private Button Setting(Transform parent, string label, string value, float y, Action action)
@@ -405,7 +577,7 @@ public class MainMenuBehaviour : MonoBehaviour
     private void BuildNavigation(RectTransform root)
     {
         GameObject bleedObject = OceanUI.CreateObject("Navigation Edge Fill", hubCanvas.transform);
-        Color navigationColor = new Color32(3, 26, 41, 255);
+        Color navigationColor = OceanUI.Panel;
         Image bleedImage = bleedObject.AddComponent<Image>();
         bleedImage.color = navigationColor;
         bleedImage.raycastTarget = false;
@@ -422,7 +594,8 @@ public class MainMenuBehaviour : MonoBehaviour
         for (int i = 0; i < 5; i++)
         {
             int page = i;
-            Button b = OceanUI.CreateButton(labels[i], labels[i], bar.transform, i == 2 ? OceanUI.Aqua : OceanUI.Panel, () => Navigate(page));
+            Color tileColor = i % 3 == 0 ? OceanUI.Coral : i % 3 == 1 ? OceanUI.Sand : OceanUI.Aqua;
+            Button b = OceanUI.CreateButton(labels[i], labels[i], bar.transform, tileColor, () => Navigate(page));
             float x0 = i / 5f + .008f, x1 = (i + 1) / 5f - .008f;
             OceanUI.SetRect(b.GetComponent<RectTransform>(), new Vector2(x0, .10f), new Vector2(x1, .94f), Vector2.zero, Vector2.zero);
             b.GetComponentInChildren<TMP_Text>().fontSize = i == 3 ? 18f : 22f;
@@ -567,30 +740,140 @@ public class MainMenuBehaviour : MonoBehaviour
 
     private void ToggleTouch() { GameSession.ShowTouchControls = !GameSession.ShowTouchControls; RefreshAll(); }
 
+    private void SetAboutVisible(bool visible)
+    {
+        if (aboutPanel != null) aboutPanel.SetActive(visible);
+    }
+
+    private static string DisplayModeName(FishGameMode mode)
+    {
+        return mode switch
+        {
+            FishGameMode.TimeAttack => "TIME ATTACK",
+            FishGameMode.Riptide => "RIPTIDE",
+            _ => mode.ToString().ToUpperInvariant()
+        };
+    }
+
     private void RefreshAll()
     {
         if (fullPageBackdrop != null)
         {
             bool opaquePage = currentPage == 0 || currentPage == 1 || currentPage == 3 || currentPage == 4;
             fullPageBackdrop.gameObject.SetActive(opaquePage);
-            fullPageBackdrop.color = currentPage == 0 || currentPage == 1 ? new Color32(3, 45, 66, 255) :
-                currentPage == 3 ? new Color32(4, 52, 72, 255) : new Color32(3, 39, 61, 255);
+            fullPageBackdrop.color = currentPage == 0 ? new Color32(155, 220, 240, 255) :
+                currentPage == 1 ? new Color32(255, 225, 139, 255) :
+                currentPage == 3 ? new Color32(255, 169, 199, 255) : new Color32(171, 226, 242, 255);
         }
         RefreshWallet();
-        if (homeText != null) homeText.text = $"{GameSession.Mode.ToString().ToUpperInvariant()} MODE\n{GameSession.EquippedCharacterName.ToUpperInvariant()} SELECTED";
+        if (homeText != null) homeText.text = $"{DisplayModeName(GameSession.Mode)} MODE\n{GameSession.EquippedCharacterName.ToUpperInvariant()} SELECTED";
         if (touchLabel != null) touchLabel.text = GameSession.ShowTouchControls ? "ON" : "OFF";
+        if (soundLabel != null) soundLabel.text = GameAudioManager.Muted ? "OFF" : "ON";
+        if (bgmSlider != null) bgmSlider.SetValueWithoutNotify(GameAudioManager.BgmVolume);
+        if (sfxSlider != null) sfxSlider.SetValueWithoutNotify(GameAudioManager.SfxVolume);
+        if (bgmValueLabel != null) bgmValueLabel.text = Mathf.RoundToInt(GameAudioManager.BgmVolume * 100f) + "%";
+        if (sfxValueLabel != null) sfxValueLabel.text = Mathf.RoundToInt(GameAudioManager.SfxVolume * 100f) + "%";
         if (characterFeedback != null && string.IsNullOrEmpty(characterFeedback.text)) characterFeedback.text = "CURRENT: " + GameSession.EquippedCharacterName.ToUpperInvariant();
-        for (int i = 0; i < navTiles.Count; i++) navTiles[i].color = i == currentPage ? OceanUI.Aqua : OceanUI.Panel;
+        RefreshShopAndCharacterButtons();
+        RefreshReadyEquipmentIcons();
+        for (int i = 0; i < navTiles.Count; i++)
+        {
+            Color tileColor = i % 3 == 0 ? OceanUI.Coral : i % 3 == 1 ? OceanUI.Sand : OceanUI.Aqua;
+            navTiles[i].color = i == currentPage ? Color.Lerp(tileColor, Color.white, 0.38f) : tileColor;
+        }
         if (stageTitle != null)
         {
             int i = Mathf.Clamp((int)GameSession.Mode, 0, CarouselModes.Length - 1);
-            string modeName = GameSession.Mode == FishGameMode.TimeAttack ? "TIME ATTACK" : GameSession.Mode.ToString().ToUpperInvariant();
+            string modeName = DisplayModeName(GameSession.Mode);
             stageTitle.text = modeName + " MODE";
             stageDescription.text = ModeDescriptions[i];
         }
         carousel?.SetTutorialLocked(false);
         if (stagePrevious != null) stagePrevious.gameObject.SetActive(true);
         if (stageNext != null) stageNext.gameObject.SetActive(true);
+    }
+
+    private void RefreshShopAndCharacterButtons()
+    {
+        Transform root = hubCanvas != null ? OceanUI.SafeRoot(hubCanvas) : null;
+        Button sealBuy = ComponentAt<Button>(root, "Buy Seal");
+        bool ownsSeal = GameSession.OwnsSkin(1);
+        if (sealBuy != null)
+        {
+            SetButtonText(sealBuy, ownsSeal ? "SOLD" : $"BUY  {SealCost} PEARLS");
+            sealBuy.interactable = !ownsSeal;
+        }
+
+        Transform characterPage = FindDeepChild(root, "Character Selection Page");
+        Button turtle = ComponentAt<Button>(FindDeepChild(characterPage, "TURTLE"), "Choose");
+        Button seal = ComponentAt<Button>(FindDeepChild(characterPage, "SEAL"), "Choose");
+        SetButtonText(turtle, GameSession.EquippedCharacter == 0 ? "EQUIPPED" : "EQUIP");
+        SetButtonText(seal, !ownsSeal ? "LOCKED" : GameSession.EquippedCharacter == 1 ? "EQUIPPED" : "EQUIP");
+        if (turtle != null) turtle.interactable = GameSession.EquippedCharacter != 0;
+        if (seal != null) seal.interactable = ownsSeal && GameSession.EquippedCharacter != 1;
+    }
+
+    private static void SetButtonText(Button button, string value)
+    {
+        if (button == null) return;
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = value;
+    }
+
+    private void CreateReadyEquipmentIcons(Transform page)
+    {
+        for (int i = 0; i < readyEquipmentIcons.Length; i++)
+            readyEquipmentIcons[i] = CreateReadyEquipmentIcon(page, i);
+    }
+
+    private void EnsureReadyEquipmentIcons(Transform root)
+    {
+        Transform playPage = FindDeepChild(root, "Play Page");
+        for (int i = 0; i < readyEquipmentIcons.Length; i++)
+        {
+            string iconName = i == 0 ? "Ready Character Icon" : "Ready Power " + i;
+            readyEquipmentIcons[i] = ComponentAt<Image>(playPage, iconName);
+            if (readyEquipmentIcons[i] == null)
+                readyEquipmentIcons[i] = CreateReadyEquipmentIcon(playPage, i);
+        }
+    }
+
+    private Image CreateReadyEquipmentIcon(Transform parent, int index)
+    {
+        string iconName = index == 0 ? "Ready Character Icon" : "Ready Power " + index;
+        Image icon = OceanUI.CreatePanel(iconName, parent, GameManager.EquipmentPlaceholderColor(index));
+        icon.raycastTarget = false;
+        icon.preserveAspect = true;
+        float width = 0.105f;
+        float gap = 0.018f;
+        float left = 0.19f + index * (width + gap);
+        OceanUI.SetRect(icon.rectTransform, new Vector2(left, .325f), new Vector2(left + width, .395f), Vector2.zero, Vector2.zero);
+        TMP_Text label = OceanUI.CreateText("", icon.transform, 18f, OceanUI.Deep);
+        label.name = "Equipment Label";
+        return icon;
+    }
+
+    private void RefreshReadyEquipmentIcons()
+    {
+        GameManager manager = GameManager.Instance;
+        string[] labels = { GameSession.EquippedCharacterName.ToUpperInvariant(), "SHIELD", "DASH", "MAGNET", "INVINCIBLE" };
+        for (int i = 0; i < readyEquipmentIcons.Length; i++)
+        {
+            Image icon = readyEquipmentIcons[i];
+            if (icon == null) continue;
+            bool available = i == 0 || GameSession.PowerUpCount(i - 1) > 0;
+            icon.gameObject.SetActive(available);
+            if (!available) continue;
+            Sprite sprite = i == 0 ? manager?.GetCharacterEquipmentIcon() : manager?.GetPowerEquipmentIcon(i - 1);
+            icon.sprite = sprite;
+            icon.color = sprite != null ? Color.white : GameManager.EquipmentPlaceholderColor(i);
+            TMP_Text label = ComponentAt<TMP_Text>(icon.transform, "Equipment Label");
+            if (label != null)
+            {
+                label.gameObject.SetActive(sprite == null);
+                label.text = i == 0 ? labels[i] : labels[i] + " x" + GameSession.PowerUpCount(i - 1);
+            }
+        }
     }
 
     public void SetShopMenu() => Navigate(1);

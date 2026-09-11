@@ -4,7 +4,8 @@ public enum FishGameMode
 {
     Tutorial,
     Standard,
-    TimeAttack
+    TimeAttack,
+    Riptide
 }
 
 public static class GameSession

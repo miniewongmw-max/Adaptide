@@ -87,6 +87,12 @@ public class MapManager : MonoBehaviour
     private int movingRowsUntilCoral;
     private SeaObstacleType lastTrafficType = SeaObstacleType.Coral;
     private float startingPlayerZ;
+    private float trafficSpeedMultiplier = 1f;
+    private float trafficIntervalMultiplier = 1f;
+    private float trafficPauseMultiplier = 1f;
+    private int trafficWaveSizeBonus;
+    private float pearlPairChance = 0.24f;
+    private float bonusCollectibleMultiplier = 1f;
 
     public float StartingSafeMaxZ => startingPlayerZ + safeRowsAheadOfStart;
 
@@ -98,6 +104,12 @@ public class MapManager : MonoBehaviour
 
     void ConfigureDifficulty()
     {
+        trafficSpeedMultiplier = 1f;
+        trafficIntervalMultiplier = 1f;
+        trafficPauseMultiplier = 1f;
+        trafficWaveSizeBonus = 0;
+        pearlPairChance = 0.24f;
+        bonusCollectibleMultiplier = 1f;
         movingRowsUntilCoral = Random.Range(minimumMovingRowsBeforeCoral, maximumMovingRowsBeforeCoral + 1);
         int stage = Mathf.Clamp(GameSession.SelectedStage, 0, 2);
         switch (GameSession.Mode)
@@ -111,6 +123,18 @@ public class MapManager : MonoBehaviour
                 obstacleSpawnChance = 0.34f + stage * 0.04f;
                 maximumObstaclesPerRow = 2;
                 collectibleSpawnChance = 0.30f;
+                break;
+            case FishGameMode.Riptide:
+                obstacleSpawnChance = 0.58f + stage * 0.04f;
+                maximumObstaclesPerRow = 4;
+                collectibleSpawnChance = 0.06f;
+                trafficSpeedMultiplier = 1.45f;
+                trafficIntervalMultiplier = 0.58f;
+                trafficPauseMultiplier = 0.48f;
+                trafficWaveSizeBonus = 2;
+                pearlPairChance = 0.03f;
+                bonusCollectibleMultiplier = 0.25f;
+                movingRowsUntilCoral = Random.Range(5, 9);
                 break;
             default:
                 obstacleSpawnChance = 0.27f + stage * 0.04f;
@@ -384,16 +408,16 @@ public class MapManager : MonoBehaviour
         GameObject prefab = GetObstaclePrefab(type);
         if (prefab == null) return;
         int direction = Random.value < 0.5f ? -1 : 1;
-        float modeSpeed = GameSession.Mode == FishGameMode.TimeAttack
+        float modeSpeed = (GameSession.Mode == FishGameMode.TimeAttack
             ? timeAttackAnimalSpeedMultiplier
-            : 1f;
+            : 1f) * trafficSpeedMultiplier;
 
         float minSpeed = Mathf.Max(0.05f, Mathf.Min(animalSpeedRange.x, animalSpeedRange.y));
         float maxSpeed = Mathf.Max(minSpeed, Mathf.Max(animalSpeedRange.x, animalSpeedRange.y));
         float speed = Random.Range(minSpeed, maxSpeed) * modeSpeed;
-        float interval = Random.Range(animalSpawnIntervalRange.x, animalSpawnIntervalRange.y);
-        int waveSize = Random.Range(animalsPerWaveRange.x, animalsPerWaveRange.y + 1);
-        float wavePause = Random.Range(animalWavePauseRange.x, animalWavePauseRange.y);
+        float interval = Random.Range(animalSpawnIntervalRange.x, animalSpawnIntervalRange.y) * trafficIntervalMultiplier;
+        int waveSize = Random.Range(animalsPerWaveRange.x, animalsPerWaveRange.y + 1) + trafficWaveSizeBonus;
+        float wavePause = Random.Range(animalWavePauseRange.x, animalWavePauseRange.y) * trafficPauseMultiplier;
         AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
         lane.Configure(prefab, type, direction, speed, interval, animalOffscreenDistance,
             obstacleHeight, GetNamedObstaclePrefab(type) == null, waveSize, wavePause);
@@ -409,7 +433,7 @@ public class MapManager : MonoBehaviour
 
         int obstacleCount = staticType == SeaObstacleType.Crab
             ? 1
-            : Random.Range(1, 3);
+            : Random.Range(1, maximumObstaclesPerRow + 1);
 
         List<int> lanes = new List<int>();
         for (int x = -4; x <= 4; x++) lanes.Add(x);
@@ -504,7 +528,7 @@ public class MapManager : MonoBehaviour
             SpawnPearl(collectibleContainer, lane);
             // Occasional paired pearl, never more than two on a row.
             int neighbour = lane + pearlPatternDirection;
-            if (Random.value < 0.24f && freeLanes.Contains(neighbour)) SpawnPearl(collectibleContainer, neighbour);
+            if (Random.value < pearlPairChance && freeLanes.Contains(neighbour)) SpawnPearl(collectibleContainer, neighbour);
             pearlPatternLane = Mathf.Clamp(pearlPatternLane + pearlPatternDirection, -3, 3);
             if (Mathf.Abs(pearlPatternLane) >= 3) pearlPatternDirection *= -1;
             pearlPatternRemaining--;
@@ -513,7 +537,7 @@ public class MapManager : MonoBehaviour
 
         if (freeLanes.Count > 0)
         {
-            float bonusRoll = Random.value;
+            float bonusRoll = Random.value / Mathf.Max(0.01f, bonusCollectibleMultiplier);
             if (bonusRoll < 0.025f) CreateBonusCollectible(collectibleContainer, freeLanes, CollectibleKind.TreasureChest);
             else if (bonusRoll < 0.09f) CreateBonusCollectible(collectibleContainer, freeLanes, CollectibleKind.Starfish);
             else if (bonusRoll < 0.115f) CreateBonusCollectible(collectibleContainer, freeLanes, (CollectibleKind)Random.Range(3, 7));
