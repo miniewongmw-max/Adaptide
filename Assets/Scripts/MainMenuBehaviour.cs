@@ -243,11 +243,23 @@ public class MainMenuBehaviour : MonoBehaviour
         {
             if (pageIndex == 2 || pages[pageIndex] == null) continue;
             int panelIndex = pageIndex;
+            Color[] pagePalette = pageIndex == 1
+                ? new[] { OceanUI.Coral, OceanUI.Aqua }
+                : palette;
             foreach (Image panel in pages[pageIndex].GetComponentsInChildren<Image>(true))
             {
                 if (panel.name == "Opaque Page Background" || panel.GetComponent<Button>() != null ||
                     panel.GetComponentInParent<Slider>() != null) continue;
-                if (OceanUI.MakeRoundedIfDefault(panel)) panel.color = palette[panelIndex++ % palette.Length];
+                if (OceanUI.MakeRoundedIfDefault(panel)) panel.color = pagePalette[panelIndex++ % pagePalette.Length];
+            }
+            if (pageIndex == 1)
+            {
+                int shopButtonIndex = 0;
+                foreach (Button shopButton in pages[pageIndex].GetComponentsInChildren<Button>(true))
+                {
+                    Image buttonImage = shopButton.GetComponent<Image>();
+                    if (buttonImage != null) buttonImage.color = shopButtonIndex++ % 2 == 0 ? OceanUI.Coral : OceanUI.Aqua;
+                }
             }
             foreach (TMP_Text label in pages[pageIndex].GetComponentsInChildren<TMP_Text>(true))
                 label.color = OceanUI.Deep;
@@ -762,7 +774,7 @@ public class MainMenuBehaviour : MonoBehaviour
             bool opaquePage = currentPage == 0 || currentPage == 1 || currentPage == 3 || currentPage == 4;
             fullPageBackdrop.gameObject.SetActive(opaquePage);
             fullPageBackdrop.color = currentPage == 0 ? new Color32(155, 220, 240, 255) :
-                currentPage == 1 ? new Color32(255, 225, 139, 255) :
+                currentPage == 1 ? new Color32(174, 226, 242, 255) :
                 currentPage == 3 ? new Color32(255, 169, 199, 255) : new Color32(171, 226, 242, 255);
         }
         RefreshWallet();

@@ -158,6 +158,7 @@ public class GameManager : MonoBehaviour
         powerText = OceanUI.CreateText("", root, 24f, OceanUI.Foam, TextAlignmentOptions.Left);
         powerText.name = "Power Text";
         OceanUI.SetRect(powerText.rectTransform, new Vector2(0.03f, 0.84f), new Vector2(0.65f, 0.895f), Vector2.zero, Vector2.zero);
+        powerText.gameObject.SetActive(false);
 
         BuildDpad(root, adaptive);
 
@@ -237,6 +238,7 @@ public class GameManager : MonoBehaviour
         if (bestScoreText != null) bestScoreText.fontSize = 42f;
         timerText = ComponentAt<TMP_Text>(root, "Timer Text");
         powerText = ComponentAt<TMP_Text>(root, "Power Text");
+        if (powerText != null) powerText.gameObject.SetActive(false);
         statusText = ComponentAt<TMP_Text>(root, "Status Text");
         tutorialObjectivePanel = FindDeepChild(root, "Tutorial Objective")?.gameObject;
         tutorialObjectiveText = ComponentAt<TMP_Text>(root, "Tutorial Objective Text");
@@ -790,12 +792,8 @@ public class GameManager : MonoBehaviour
         }
         if (pearlText != null) pearlText.text = $"PEARL  {GameSession.PearlWallet + GameSession.RunPearls}";
         timerText.text = GameSession.Mode == FishGameMode.TimeAttack ? $"TIME  {Mathf.CeilToInt(remainingTime)}" : "";
-        string powers = "";
-        if (shieldReady) powers += "SHIELD  ";
-        if (HasSpeedDash) powers += "DASH  ";
-        if (HasPearlMagnet) powers += "MAGNET  ";
-        if (IsInvincible) powers += "INVINCIBLE";
-        powerText.text = powers;
+        // The top-right icon row replaces the old equipment word list.
+        if (powerText != null) powerText.text = "";
         bool[] activePowers = { shieldReady, HasSpeedDash, HasPearlMagnet, IsInvincible };
         for (int i = 0; i < gameplayPowerIcons.Length; i++)
         {
