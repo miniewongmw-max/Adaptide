@@ -131,8 +131,8 @@ public class MapManager : MonoBehaviour
         PlayerController startingPlayer = FindAnyObjectByType<PlayerController>();
         startingPlayerZ = startingPlayer != null ? Mathf.Round(startingPlayer.transform.position.z) : 0f;
 
-        // 地图不再从 Z = 0 开始
-        // 例如 rowsBehindPlayer = 5，就从 Z = -5 开始
+        // map don't start from Z = 0
+        // example rowsBehindPlayer = 5，start from Z = -5
         int startingZ = -rowsBehindPlayer;
 
         for (int i = 0; i < length; i++)
@@ -194,7 +194,7 @@ public class MapManager : MonoBehaviour
 
         }
 
-        // 下一排接在目前地图最前面
+        //Next row start from current map at front
         nextRowZ = startingZ + length;
 
     }
@@ -346,7 +346,7 @@ public class MapManager : MonoBehaviour
         }
     }
 
-    // 取得目前地图最底下那一排
+    // Get the bottom row of the current map
     public float GetBackRowZ()
     {
         if (rows.Count == 0)

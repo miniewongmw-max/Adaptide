@@ -15,6 +15,10 @@ public class AnimalTrafficLane : MonoBehaviour
     private int spawnedInWave;
     private float pauseDuration;
 
+    [Header("Animal Facing")]
+    [SerializeField] private Vector3 rightFacingRotation = new Vector3(0f, -90f, 0f);
+    [SerializeField] private Vector3 leftFacingRotation = new Vector3(0f, 90f, 0f);
+
     public SeaObstacleType AnimalType => animalType;
     public int Direction => direction;
     public float Speed => speed;
@@ -68,6 +72,8 @@ public class AnimalTrafficLane : MonoBehaviour
         GameObject animal = Instantiate(animalPrefab, transform);
         animal.name = animalType + " Traffic";
         animal.transform.localPosition = new Vector3(x, spawnHeight, 0f);
+        animal.transform.localRotation = Quaternion.Euler(
+            direction > 0 ? rightFacingRotation : leftFacingRotation);
 
         SeaObstacle obstacle = animal.GetComponent<SeaObstacle>();
         if (obstacle == null) obstacle = animal.AddComponent<SeaObstacle>();
