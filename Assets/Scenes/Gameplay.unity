@@ -16532,15 +16532,23 @@ MonoBehaviour:
   - {fileID: 0}
   sideDecorationChance: 0.48
   sideDecorationScaleRange: {x: 0.82, y: 1.18}
-  sideDecorationSurfaceHeight: 0.5
+  sideDecorationSurfaceHeight: -0.22
+  sideDecorationBehindOffset: 0.24
   collectiblePrefabs:
   - {fileID: 271490397321868210, guid: fea3b59f892b38044b65de38a7fbecb7, type: 3}
   collectibleSpawnChance: 0.01
-  collectibleHeight: 0.5
+  collectibleHeight: 0.16
+  pearlHeight: 0.13
+  coralGroundHeight: 0.05
+  jellyfishGroundHeight: 0.2
+  squidGroundHeight: 0.11
+  pufferfishGroundHeight: 0.05
+  sharkGroundHeight: 0.08
+  crabGroundHeight: 0.1
   obstaclePrefabs:
   - {fileID: 1671162218962871013, guid: 158c31a13e1c38b4db3ff581fa181ffb, type: 3}
   obstacleSpawnChance: 0.043
-  obstacleHeight: 0.5
+  obstacleHeight: 0.12
   maximumObstaclesPerRow: 1
   obstacleLayer:
     serializedVersion: 2
@@ -21843,7 +21851,7 @@ MonoBehaviour:
   moveDuration: 0.12
   moveHopHeight: 0.055
   minX: -4
-  maxX: 5
+  maxX: 4
   mapManager: {fileID: 1546273262}
   obstacleLayer:
     serializedVersion: 2
@@ -23088,13 +23096,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 135ee6979d16fa947b36db5738e0fa13, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::GameAudioManager
-  backgroundMusic: {fileID: 0}
-  buttonClick: {fileID: 0}
-  playerMove: {fileID: 0}
-  pearlCollected: {fileID: 0}
-  obstacleHit: {fileID: 0}
-  powerUpCollected: {fileID: 0}
-  gameOver: {fileID: 0}
+  backgroundMusic: {fileID: 8300000, guid: c63c99472ba440f7ba7a846f14bdce0d, type: 3}
+  buttonClick: {fileID: 8300000, guid: 6708136adf364d93b917ca2f14a8192a, type: 3}
+  playerMove: {fileID: 8300000, guid: 79beebb886464f3bbca5b13afea7d4e5, type: 3}
+  pearlCollected: {fileID: 8300000, guid: d21da5cd971d41c7a33a73ef878c02be, type: 3}
+  obstacleHit: {fileID: 8300000, guid: 7e5fc65f64bb498ab9401d36ff46f22b, type: 3}
+  powerUpCollected: {fileID: 8300000, guid: 975b83d0b8c34b3cba7096448a7ca2bb, type: 3}
+  gameOver: {fileID: 8300000, guid: abbee3c442df4a5db1cbf6ab2e05e3be, type: 3}
   musicSource: {fileID: 2000297260}
   sfxSource: {fileID: 2000297259}
 --- !u!4 &2000297262

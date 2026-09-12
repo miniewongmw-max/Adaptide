@@ -83,7 +83,7 @@ public class AnimalTrafficLane : MonoBehaviour
         SeaObstacle obstacle = animal.GetComponent<SeaObstacle>();
         if (obstacle == null) obstacle = animal.AddComponent<SeaObstacle>();
         obstacle.Initialize(animalType, applyFallbackTint);
-        PrefabGrounding.AlignVisibleBottom(animal, transform, spawnHeight);
+        PrefabGrounding.AlignVisibleBottom(animal, transform, spawnHeight, 0f);
 
         Collider[] colliders = animal.GetComponentsInChildren<Collider>(true);
         if (colliders.Length == 0)

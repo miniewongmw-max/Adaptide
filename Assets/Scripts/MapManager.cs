@@ -52,7 +52,9 @@ public class MapManager : MonoBehaviour
     [Tooltip("Random scale range applied to each side decoration.")]
     public Vector2 sideDecorationScaleRange = new Vector2(.82f, 1.18f);
     [Tooltip("Visible bottom height above the side border tile.")]
-    public float sideDecorationSurfaceHeight = .5f;
+    public float sideDecorationSurfaceHeight = -.22f;
+    [Tooltip("Moves side decorations slightly behind the centre of their row.")]
+    public float sideDecorationBehindOffset = .24f;
 
     [Header("Alternating Ground Rows")]
     public bool useAlternatingRowTint = true;
@@ -69,13 +71,24 @@ public class MapManager : MonoBehaviour
     public List<GameObject> collectiblePrefabs;
     [Range(0f, 1f)]
     public float collectibleSpawnChance = 0.15f;
-    public float collectibleHeight = 0.5f;
+    public float collectibleHeight = 0.16f;
+
+    [Header("Per-Prefab Grounding Heights")]
+    [Tooltip("Visible bottom height used for pearls. Other power-up collectibles keep using Collectible Height.")]
+    public float pearlHeight = 0.13f;
+    [Tooltip("Each value is the requested visible-bottom position, so long tentacles/legs are included when grounding the model.")]
+    public float coralGroundHeight = 0.05f;
+    public float jellyfishGroundHeight = 0.20f;
+    public float squidGroundHeight = 0.11f;
+    public float pufferfishGroundHeight = 0.05f;
+    public float sharkGroundHeight = 0.08f;
+    public float crabGroundHeight = 0.10f;
 
     [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
     public List<GameObject> obstaclePrefabs;
     [Range(0f, 1f)]
     public float obstacleSpawnChance = 0.1f;
-    public float obstacleHeight = 0.5f;
+    public float obstacleHeight = 0.12f;
     public int maximumObstaclesPerRow = 4;
     public LayerMask obstacleLayer;
     [Header("Crossing Traffic Lanes")]
@@ -171,7 +184,11 @@ public class MapManager : MonoBehaviour
 
     void GenerateStartingMap()
     {
-        int halfWidth = width / 2;
+        // A centred grid needs an odd tile count. Inspector values such as 30
+        // are expanded to 31 at runtime instead of producing -15..14.
+        int generatedWidth = Mathf.Max(11, width);
+        if (generatedWidth % 2 == 0) generatedWidth++;
+        int halfWidth = generatedWidth / 2;
         PlayerController startingPlayer = FindAnyObjectByType<PlayerController>();
         startingPlayerZ = startingPlayer != null ? Mathf.Round(startingPlayer.transform.position.z) : 0f;
 
@@ -191,7 +208,7 @@ public class MapManager : MonoBehaviour
 
             rowObject.transform.SetParent(transform);
 
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < generatedWidth; x++)
             {
                 float xPosition = x - halfWidth;
 
@@ -218,8 +235,8 @@ public class MapManager : MonoBehaviour
 
             // Always provide one unreachable visual lane on both sides. These
             // tiles do not alter the player's -4..4 movement limits.
-            EnsureSideBorderTile(rowObject.transform, -5f, -halfWidth, width - 1 - halfWidth);
-            EnsureSideBorderTile(rowObject.transform, 5f, -halfWidth, width - 1 - halfWidth);
+            EnsureSideBorderTile(rowObject.transform, -5f, -halfWidth, generatedWidth - 1 - halfWidth);
+            EnsureSideBorderTile(rowObject.transform, 5f, -halfWidth, generatedWidth - 1 - halfWidth);
 
             //Obstacles
             GameObject obstacleContainer = new GameObject("Obstacles");
@@ -326,8 +343,9 @@ public class MapManager : MonoBehaviour
         }
         GameObject obstacle = SpawnObstaclePrefab(type, container);
         if (obstacle == null) return;
-        obstacle.transform.localPosition = new Vector3(Mathf.Clamp(lane, -4, 4), obstacleHeight, 0f);
-        PrefabGrounding.AlignVisibleBottom(obstacle, container, obstacleHeight);
+        float groundHeight = GetObstacleGroundHeight(type);
+        obstacle.transform.localPosition = new Vector3(Mathf.Clamp(lane, -4, 4), groundHeight, 0f);
+        PrefabGrounding.AlignVisibleBottom(obstacle, container, groundHeight, 0f);
     }
 
     public void SpawnTutorialObstacleLine(SeaObstacleType type, float z)
@@ -383,8 +401,9 @@ public class MapManager : MonoBehaviour
         SeaObstacleType type = lessons[tutorialObstacleIndex % lessons.Length];
         GameObject obstacle = SpawnObstaclePrefab(type, container);
         if (obstacle == null) return;
-        obstacle.transform.localPosition = new Vector3(lane, obstacleHeight, 0f);
-        PrefabGrounding.AlignVisibleBottom(obstacle, container, obstacleHeight);
+        float groundHeight = GetObstacleGroundHeight(type);
+        obstacle.transform.localPosition = new Vector3(lane, groundHeight, 0f);
+        PrefabGrounding.AlignVisibleBottom(obstacle, container, groundHeight, 0f);
         tutorialObstacleIndex++;
     }
 
@@ -470,7 +489,7 @@ public class MapManager : MonoBehaviour
         float wavePause = Random.Range(animalWavePauseRange.x, animalWavePauseRange.y) * trafficPauseMultiplier;
         AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
         lane.Configure(prefab, type, direction, speed, interval, animalOffscreenDistance,
-            obstacleHeight, GetNamedObstaclePrefab(type) == null, waveSize, wavePause);
+            GetObstacleGroundHeight(type), GetNamedObstaclePrefab(type) == null, waveSize, wavePause);
     }
 
     private void EnsureSideBorderTile(Transform row, float laneX, float existingMinX, float existingMaxX)
@@ -567,7 +586,10 @@ public class MapManager : MonoBehaviour
         decoration.name = assignedPrefab != null
             ? "Side Decoration Type " + (decorationType + 1)
             : "Side Decoration Type " + (decorationType + 1) + " Placeholder";
-        decoration.transform.localPosition = new Vector3(laneX + Random.Range(-.20f, .20f), 0f, Random.Range(-.28f, .28f));
+        decoration.transform.localPosition = new Vector3(
+            laneX + Random.Range(-.20f, .20f),
+            0f,
+            sideDecorationBehindOffset + Random.Range(-.12f, .12f));
         decoration.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
         float minScale = Mathf.Max(.05f, Mathf.Min(sideDecorationScaleRange.x, sideDecorationScaleRange.y));
         float maxScale = Mathf.Max(minScale, Mathf.Max(sideDecorationScaleRange.x, sideDecorationScaleRange.y));
@@ -634,7 +656,7 @@ public class MapManager : MonoBehaviour
         float wavePause = tutorial ? 9f : Random.Range(8f, 11f);
         AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
         lane.Configure(prefab, SeaObstacleType.Pufferfish, direction, speed, interval,
-            animalOffscreenDistance, obstacleHeight,
+            animalOffscreenDistance, GetObstacleGroundHeight(SeaObstacleType.Pufferfish),
             GetNamedObstaclePrefab(SeaObstacleType.Pufferfish) == null, schoolSize, wavePause, tutorial);
     }
 
@@ -667,8 +689,9 @@ public class MapManager : MonoBehaviour
             GameObject obstacle = SpawnObstaclePrefab(staticType, obstacleContainer);
             if (obstacle != null)
             {
-                obstacle.transform.localPosition = new Vector3(lanes[choice], obstacleHeight, 0f);
-                PrefabGrounding.AlignVisibleBottom(obstacle, obstacleContainer, obstacleHeight);
+                float groundHeight = GetObstacleGroundHeight(staticType);
+                obstacle.transform.localPosition = new Vector3(lanes[choice], groundHeight, 0f);
+                PrefabGrounding.AlignVisibleBottom(obstacle, obstacleContainer, groundHeight, 0f);
             }
             lanes.RemoveAt(choice);
         }
@@ -780,7 +803,21 @@ public class MapManager : MonoBehaviour
 
     void SpawnPearl(Transform container, int lane)
     {
-        SpawnCollectiblePrefab(CollectibleKind.Pearl, container, lane, collectibleHeight);
+        SpawnCollectiblePrefab(CollectibleKind.Pearl, container, lane, pearlHeight);
+    }
+
+    private float GetObstacleGroundHeight(SeaObstacleType type)
+    {
+        return type switch
+        {
+            SeaObstacleType.Coral => coralGroundHeight,
+            SeaObstacleType.Jellyfish => jellyfishGroundHeight,
+            SeaObstacleType.Squid => squidGroundHeight,
+            SeaObstacleType.Pufferfish => pufferfishGroundHeight,
+            SeaObstacleType.Shark => sharkGroundHeight,
+            SeaObstacleType.Crab => crabGroundHeight,
+            _ => obstacleHeight
+        };
     }
 
     void CreateBonusCollectible(Transform container, List<int> freeLanes, CollectibleKind kind)
@@ -849,7 +886,7 @@ public class MapManager : MonoBehaviour
             trigger.isTrigger = true;
             trigger.radius = 0.48f;
         }
-        PrefabGrounding.AlignVisibleBottom(collectible, container, height);
+        PrefabGrounding.AlignVisibleBottom(collectible, container, height, 0f);
         ConfigureCollectibleTrigger(collectible, container, lane);
         return collectible;
     }

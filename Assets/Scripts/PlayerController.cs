@@ -36,6 +36,12 @@ public class PlayerController : MonoBehaviour
     {
         // Keep imported turtle models grounded; this is intentionally only a tiny visual lift.
         moveHopHeight = Mathf.Min(moveHopHeight, .055f);
+        minX = Mathf.Max(minX, -4f);
+        maxX = Mathf.Min(maxX, 4f);
+        Vector3 alignedPosition = transform.position;
+        alignedPosition.x = Mathf.Round(alignedPosition.x / tileSize) * tileSize;
+        alignedPosition.z = Mathf.Round(alignedPosition.z / tileSize) * tileSize;
+        transform.position = alignedPosition;
         furthestScoredZ = transform.position.z;
         cameraController = FindAnyObjectByType<CameraController>();
         RefreshCharacter();
