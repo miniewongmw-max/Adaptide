@@ -32,7 +32,7 @@ public class AnimalTrafficLane : MonoBehaviour
         animalPrefab = prefab;
         animalType = type;
         direction = travelDirection >= 0 ? 1 : -1;
-        speed = Mathf.Max(0.5f, laneSpeed);
+        speed = Mathf.Max(0.22f, laneSpeed);
         spawnInterval = Mathf.Max(0.65f, interval);
         offscreenDistance = Mathf.Max(8f, distance);
         spawnHeight = height;
@@ -43,13 +43,15 @@ public class AnimalTrafficLane : MonoBehaviour
         // Prewarm the lane as though animals had already entered from off-screen,
         // then continue spawning every fixed interval from the hidden side.
         float spacing = speed * spawnInterval;
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i < animalsPerWave; i++)
         {
             float travelled = i * spacing;
             if (travelled > offscreenDistance * 1.7f) break;
             SpawnAnimal(StartX() + direction * travelled);
         }
-        nextSpawnTime = Time.time + spawnInterval;
+        // The prewarmed animals are the first complete school/wave. Wait before
+        // beginning the next one instead of immediately adding extra animals.
+        nextSpawnTime = Time.time + pauseDuration;
     }
 
     private void Update()
@@ -78,6 +80,7 @@ public class AnimalTrafficLane : MonoBehaviour
         SeaObstacle obstacle = animal.GetComponent<SeaObstacle>();
         if (obstacle == null) obstacle = animal.AddComponent<SeaObstacle>();
         obstacle.Initialize(animalType, applyFallbackTint);
+        PrefabGrounding.AlignVisibleBottom(animal, transform, spawnHeight);
 
         Collider[] colliders = animal.GetComponentsInChildren<Collider>(true);
         if (colliders.Length == 0)

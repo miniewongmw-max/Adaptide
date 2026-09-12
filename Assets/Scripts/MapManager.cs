@@ -44,6 +44,16 @@ public class MapManager : MonoBehaviour
     public GameObject pufferfishPrefab;
     public GameObject sharkPrefab;
 
+    [Header("Unreachable Side Decorations")]
+    [Tooltip("Assign four visual-only 3D decoration prefabs. They spawn randomly outside lanes -4 to 4.")]
+    public GameObject[] sideDecorationPrefabs = new GameObject[4];
+    [Range(0f, 1f)]
+    public float sideDecorationChance = .32f;
+    [Tooltip("Random scale range applied to each side decoration.")]
+    public Vector2 sideDecorationScaleRange = new Vector2(.82f, 1.18f);
+    [Tooltip("Visible bottom height above the side border tile.")]
+    public float sideDecorationSurfaceHeight = .5f;
+
     [Header("Legacy Prefab Fallbacks")]
     [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
     public List<GameObject> collectiblePrefabs;
@@ -129,7 +139,7 @@ public class MapManager : MonoBehaviour
                 maximumObstaclesPerRow = 4;
                 collectibleSpawnChance = 0.06f;
                 trafficSpeedMultiplier = 1.45f;
-                trafficIntervalMultiplier = 0.58f;
+                trafficIntervalMultiplier = 0.50f;
                 trafficPauseMultiplier = 0.48f;
                 trafficWaveSizeBonus = 2;
                 pearlPairChance = 0.03f;
@@ -195,6 +205,11 @@ public class MapManager : MonoBehaviour
                     new Vector3(xPosition, 0f, 0f);
             }
 
+            // Always provide one unreachable visual lane on both sides. These
+            // tiles do not alter the player's -4..4 movement limits.
+            EnsureSideBorderTile(rowObject.transform, -5f, -halfWidth, width - 1 - halfWidth);
+            EnsureSideBorderTile(rowObject.transform, 5f, -halfWidth, width - 1 - halfWidth);
+
             //Obstacles
             GameObject obstacleContainer = new GameObject("Obstacles");
             obstacleContainer.transform.SetParent(rowObject.transform);
@@ -204,6 +219,11 @@ public class MapManager : MonoBehaviour
             GameObject collectibleContainer = new GameObject("Collectibles");
             collectibleContainer.transform.SetParent(rowObject.transform);
             collectibleContainer.transform.localPosition = Vector3.zero;
+
+            GameObject decorationContainer = new GameObject("Side Decorations");
+            decorationContainer.transform.SetParent(rowObject.transform);
+            decorationContainer.transform.localPosition = Vector3.zero;
+            SpawnSideDecorations(decorationContainer.transform);
 
             if (GameSession.Mode != FishGameMode.Tutorial)
             {
@@ -236,6 +256,11 @@ public class MapManager : MonoBehaviour
     private void ClearContainer(Transform container)
     {
         if (container == null) return;
+        foreach (AnimalTrafficLane lane in container.GetComponents<AnimalTrafficLane>())
+        {
+            lane.enabled = false;
+            Destroy(lane);
+        }
         foreach (Transform child in container)
         {
             child.gameObject.SetActive(false);
@@ -283,9 +308,15 @@ public class MapManager : MonoBehaviour
         Transform row = FindRow(z);
         Transform container = row != null ? row.Find("Obstacles") : null;
         if (container == null) return;
+        if (type == SeaObstacleType.Pufferfish)
+        {
+            SpawnSlowPufferfishLane(container, true);
+            return;
+        }
         GameObject obstacle = SpawnObstaclePrefab(type, container);
         if (obstacle == null) return;
         obstacle.transform.localPosition = new Vector3(Mathf.Clamp(lane, -4, 4), obstacleHeight, 0f);
+        PrefabGrounding.AlignVisibleBottom(obstacle, container, obstacleHeight);
     }
 
     public void SpawnTutorialObstacleLine(SeaObstacleType type, float z)
@@ -342,6 +373,7 @@ public class MapManager : MonoBehaviour
         GameObject obstacle = SpawnObstaclePrefab(type, container);
         if (obstacle == null) return;
         obstacle.transform.localPosition = new Vector3(lane, obstacleHeight, 0f);
+        PrefabGrounding.AlignVisibleBottom(obstacle, container, obstacleHeight);
         tutorialObstacleIndex++;
     }
 
@@ -362,6 +394,7 @@ public class MapManager : MonoBehaviour
 
             RefreshObstacles(oldestRow);
             RefreshCollectibles(oldestRow);
+            RefreshSideDecorations(oldestRow);
 
             nextRowZ += 1f;
 
@@ -414,6 +447,11 @@ public class MapManager : MonoBehaviour
 
         float minSpeed = Mathf.Max(0.05f, Mathf.Min(animalSpeedRange.x, animalSpeedRange.y));
         float maxSpeed = Mathf.Max(minSpeed, Mathf.Max(animalSpeedRange.x, animalSpeedRange.y));
+        if (type == SeaObstacleType.Pufferfish)
+        {
+            SpawnSlowPufferfishLane(obstacleContainer, false);
+            return;
+        }
         float speed = Random.Range(minSpeed, maxSpeed) * modeSpeed;
         float interval = Random.Range(animalSpawnIntervalRange.x, animalSpawnIntervalRange.y) * trafficIntervalMultiplier;
         int waveSize = Random.Range(animalsPerWaveRange.x, animalsPerWaveRange.y + 1) + trafficWaveSizeBonus;
@@ -423,11 +461,82 @@ public class MapManager : MonoBehaviour
             obstacleHeight, GetNamedObstaclePrefab(type) == null, waveSize, wavePause);
     }
 
+    private void EnsureSideBorderTile(Transform row, float laneX, float existingMinX, float existingMaxX)
+    {
+        if (borderTilePrefab == null || laneX >= existingMinX && laneX <= existingMaxX) return;
+        GameObject tile = Instantiate(borderTilePrefab, row);
+        tile.name = laneX < 0f ? "Left Decoration Border" : "Right Decoration Border";
+        tile.transform.localPosition = new Vector3(laneX, 0f, 0f);
+    }
+
+    private void SpawnSideDecorations(Transform container)
+    {
+        if (container == null || sideDecorationPrefabs == null || sideDecorationPrefabs.Length == 0) return;
+        TrySpawnSideDecoration(container, -5f);
+        TrySpawnSideDecoration(container, 5f);
+    }
+
+    private void TrySpawnSideDecoration(Transform container, float laneX)
+    {
+        if (Random.value > sideDecorationChance) return;
+        List<GameObject> available = new List<GameObject>();
+        foreach (GameObject prefab in sideDecorationPrefabs)
+            if (prefab != null) available.Add(prefab);
+        if (available.Count == 0) return;
+
+        GameObject decoration = Instantiate(available[Random.Range(0, available.Count)], container);
+        decoration.name = "Side Decoration";
+        decoration.transform.localPosition = new Vector3(laneX + Random.Range(-.20f, .20f), 0f, Random.Range(-.28f, .28f));
+        decoration.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+        float minScale = Mathf.Max(.05f, Mathf.Min(sideDecorationScaleRange.x, sideDecorationScaleRange.y));
+        float maxScale = Mathf.Max(minScale, Mathf.Max(sideDecorationScaleRange.x, sideDecorationScaleRange.y));
+        decoration.transform.localScale *= Random.Range(minScale, maxScale);
+
+        foreach (Collider collider in decoration.GetComponentsInChildren<Collider>(true))
+            collider.enabled = false;
+        foreach (Rigidbody body in decoration.GetComponentsInChildren<Rigidbody>(true))
+        {
+            body.isKinematic = true;
+            body.useGravity = false;
+        }
+        PrefabGrounding.AlignVisibleBottom(decoration, container, sideDecorationSurfaceHeight);
+    }
+
+    private void RefreshSideDecorations(Transform row)
+    {
+        Transform oldContainer = row.Find("Side Decorations");
+        if (oldContainer != null)
+        {
+            oldContainer.gameObject.SetActive(false);
+            Destroy(oldContainer.gameObject);
+        }
+        GameObject replacement = new GameObject("Side Decorations");
+        replacement.transform.SetParent(row);
+        replacement.transform.localPosition = Vector3.zero;
+        SpawnSideDecorations(replacement.transform);
+    }
+
+    private void SpawnSlowPufferfishLane(Transform obstacleContainer, bool tutorial)
+    {
+        GameObject prefab = GetObstaclePrefab(SeaObstacleType.Pufferfish);
+        if (prefab == null) return;
+        int direction = Random.value < .5f ? -1 : 1;
+        float hardSpeedInfluence = GameSession.Mode == FishGameMode.Riptide ? 1.12f : 1f;
+        float speed = Random.Range(.30f, .43f) * hardSpeedInfluence;
+        float interval = Random.Range(2.0f, 2.65f);
+        int schoolSize = Random.Range(2, 4);
+        float wavePause = tutorial ? 6.5f : Random.Range(4.5f, 6.5f);
+        AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
+        lane.Configure(prefab, SeaObstacleType.Pufferfish, direction, speed, interval,
+            animalOffscreenDistance, obstacleHeight,
+            GetNamedObstaclePrefab(SeaObstacleType.Pufferfish) == null, schoolSize, wavePause);
+    }
+
     private void SpawnCoralRestRow(Transform obstacleContainer)
     {
-        // Rest rows use only stationary obstacles. Crab behaves like coral here:
-        // it occupies a fixed tile and never receives MovingSeaObstacle/traffic-lane movement.
-        SeaObstacleType staticType = Random.value < 0.70f
+        // Rest rows contain only coral and crab. Pufferfish now use their own
+        // slow swimming-school traffic lane.
+        SeaObstacleType staticType = Random.value < .70f
             ? SeaObstacleType.Coral
             : SeaObstacleType.Crab;
 
@@ -443,7 +552,10 @@ public class MapManager : MonoBehaviour
             int choice = Random.Range(0, lanes.Count);
             GameObject obstacle = SpawnObstaclePrefab(staticType, obstacleContainer);
             if (obstacle != null)
+            {
                 obstacle.transform.localPosition = new Vector3(lanes[choice], obstacleHeight, 0f);
+                PrefabGrounding.AlignVisibleBottom(obstacle, obstacleContainer, obstacleHeight);
+            }
             lanes.RemoveAt(choice);
         }
     }
@@ -459,12 +571,12 @@ public class MapManager : MonoBehaviour
 
     private static SeaObstacleType WeightedMovingAnimalType()
     {
-        // Crab is intentionally excluded: it is now a stationary tile obstacle,
-        // spawned on the same kind of rest rows as coral.
+        // Crab remains stationary. Pufferfish receives special slower lane
+        // timing after it is selected here.
         float roll = Random.value;
-        if (roll < 0.30f) return SeaObstacleType.Squid;
-        if (roll < 0.60f) return SeaObstacleType.Jellyfish;
-        if (roll < 0.85f) return SeaObstacleType.Pufferfish;
+        if (roll < 0.32f) return SeaObstacleType.Squid;
+        if (roll < 0.62f) return SeaObstacleType.Jellyfish;
+        if (roll < 0.82f) return SeaObstacleType.Pufferfish;
         return SeaObstacleType.Shark;
     }
 
@@ -623,6 +735,7 @@ public class MapManager : MonoBehaviour
             trigger.isTrigger = true;
             trigger.radius = 0.48f;
         }
+        PrefabGrounding.AlignVisibleBottom(collectible, container, height);
         return collectible;
     }
 

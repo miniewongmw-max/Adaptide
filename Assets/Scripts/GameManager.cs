@@ -6,7 +6,8 @@ using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
-    private const int TutorialMagnetPearlGoal = 8;
+    // Two pearls per row across eight rows makes the magnet pull clearly visible.
+    private const int TutorialMagnetPearlGoal = 16;
 
     private enum TutorialLesson
     {
@@ -150,7 +151,7 @@ public class GameManager : MonoBehaviour
         TMP_Text pauseLabel = pauseButton.GetComponentInChildren<TMP_Text>();
         pauseLabel.fontSize = 56f;
         pauseLabel.color = OceanUI.Sand;
-        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(0.79f, 0.705f), new Vector2(0.975f, 0.825f), Vector2.zero, Vector2.zero);
+        OceanUI.SetRect(pauseButton.GetComponent<RectTransform>(), new Vector2(.855f, .805f), new Vector2(.985f, .885f), Vector2.zero, Vector2.zero);
         pauseButton.gameObject.SetActive(false);
 
         CreateGameplayEquipmentIcons(root);
@@ -218,24 +219,7 @@ public class GameManager : MonoBehaviour
         pearlChip = FindDeepChild(root, "Pearls")?.gameObject;
         pearlText = ComponentAt<TMP_Text>(root, "Pearl Text");
         scoreText = ComponentAt<TMP_Text>(root, "Score Text");
-        Image pearlBackground = pearlChip != null ? pearlChip.GetComponent<Image>() : null;
-        if (pearlBackground != null)
-        {
-            pearlBackground.color = Color.clear;
-            pearlBackground.raycastTarget = false;
-            OceanUI.SetRect(pearlBackground.rectTransform, new Vector2(0.025f, 0.885f), new Vector2(0.36f, 0.98f), Vector2.zero, Vector2.zero);
-        }
-        if (pearlText != null) pearlText.fontSize = 46f;
-        Image scoreBackground = scoreText != null ? scoreText.transform.parent.GetComponent<Image>() : null;
-        if (scoreBackground != null)
-        {
-            scoreBackground.color = Color.clear;
-            scoreBackground.raycastTarget = false;
-            OceanUI.SetRect(scoreBackground.rectTransform, new Vector2(0.67f, 0.885f), new Vector2(0.975f, 0.98f), Vector2.zero, Vector2.zero);
-        }
-        if (scoreText != null) scoreText.fontSize = 84f;
         bestScoreText = ComponentAt<TMP_Text>(root, "Best Score");
-        if (bestScoreText != null) bestScoreText.fontSize = 42f;
         timerText = ComponentAt<TMP_Text>(root, "Timer Text");
         powerText = ComponentAt<TMP_Text>(root, "Power Text");
         if (powerText != null) powerText.gameObject.SetActive(false);
@@ -250,28 +234,6 @@ public class GameManager : MonoBehaviour
         crabText = ComponentAt<TMP_Text>(root, "Crab Escape Text");
         inkCloud = ComponentAt<Image>(canvas.transform, "Ink Cloud");
         EnsureGameplayEquipmentIcons(root);
-
-        Button[] themedButtons = canvas.GetComponentsInChildren<Button>(true);
-        Color[] buttonPalette = { OceanUI.Coral, OceanUI.Sand, OceanUI.Aqua };
-        for (int i = 0; i < themedButtons.Length; i++)
-        {
-            Image image = themedButtons[i].GetComponent<Image>();
-            if (image == null) continue;
-            if (themedButtons[i] == pauseButton)
-            {
-                image.color = Color.clear;
-                TMP_Text label = themedButtons[i].GetComponentInChildren<TMP_Text>(true);
-                if (label != null)
-                {
-                    label.text = "II";
-                    label.fontSize = 56f;
-                    label.color = OceanUI.Sand;
-                }
-                OceanUI.SetRect(themedButtons[i].GetComponent<RectTransform>(), new Vector2(0.79f, 0.705f), new Vector2(0.975f, 0.825f), Vector2.zero, Vector2.zero);
-                continue;
-            }
-            if (OceanUI.MakeRoundedIfDefault(image)) image.color = buttonPalette[i % buttonPalette.Length];
-        }
 
         GameplayGestureInput gestures = ComponentAt<GameplayGestureInput>(root, "Swipe Surface");
         if (gestures != null) gestures.player = playerController;
@@ -834,8 +796,9 @@ public class GameManager : MonoBehaviour
         {
             gameplayPowerIcons[i] = ComponentAt<Image>(root, "Equipped Power " + (i + 1));
             if (gameplayPowerIcons[i] == null)
-                gameplayPowerIcons[i] = CreateEquipmentIcon(root, "Equipped Power " + (i + 1), i);
-            gameplayPowerIcons[i].gameObject.SetActive(false);
+                Debug.LogError("Editable Canvas is missing Equipped Power " + (i + 1) + ". Re-bake the Gameplay Canvas.");
+            else
+                gameplayPowerIcons[i].gameObject.SetActive(false);
         }
     }
 
@@ -843,10 +806,8 @@ public class GameManager : MonoBehaviour
     {
         Image icon = OceanUI.CreatePanel(iconName, root, EquipmentPlaceholderColor(index));
         icon.raycastTarget = false;
-        float width = 0.061f;
-        float gap = 0.007f;
-        float right = 0.975f - index * (width + gap);
-        OceanUI.SetRect(icon.rectTransform, new Vector2(right - width, 0.635f), new Vector2(right, 0.695f), Vector2.zero, Vector2.zero);
+        float top = .795f - index * .067f;
+        OceanUI.SetRect(icon.rectTransform, new Vector2(.905f, top - .058f), new Vector2(.978f, top), Vector2.zero, Vector2.zero);
         icon.preserveAspect = true;
         return icon;
     }

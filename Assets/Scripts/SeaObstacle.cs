@@ -29,7 +29,10 @@ public class SeaObstacle : MonoBehaviour
         SeaLifeMotion motion = GetComponent<SeaLifeMotion>();
         if (motion == null) motion = gameObject.AddComponent<SeaLifeMotion>();
         motion.Configure(GetComponent<MovingSeaObstacle>() != null);
-        if (type == SeaObstacleType.Coral) ConfigureSingleTileCoralCollider();
+        // Imported animal prefabs often contain renderer-sized or authoring
+        // colliders that cover neighbouring lanes. Every obstacle gets the same
+        // predictable one-tile gameplay footprint in every mode.
+        ConfigureSingleTileCollider();
         if (!applyFallbackTint) return;
         Color color = type switch
         {
@@ -92,6 +95,11 @@ public class SeaObstacle : MonoBehaviour
                 return true;
             case SeaObstacleType.Squid:
                 GameManager.Instance.ShowInkCloud();
+                if (GameSession.Mode == FishGameMode.Tutorial)
+                {
+                    Destroy(gameObject, .35f);
+                    return false;
+                }
                 return true;
             case SeaObstacleType.Crab:
                 GameManager.Instance.BeginCrabEscape(player, this);
@@ -99,6 +107,11 @@ public class SeaObstacle : MonoBehaviour
             case SeaObstacleType.Jellyfish:
                 player.Stun(1.25f);
                 GameManager.Instance.ShowStatus("ZAP! STUNNED", 1.25f);
+                if (GameSession.Mode == FishGameMode.Tutorial)
+                {
+                    Destroy(gameObject, .35f);
+                    return false;
+                }
                 return true;
             case SeaObstacleType.Pufferfish:
                 GameManager.Instance.ShowStatus("PUFFER BLOCK! FIND ANOTHER WAY", 1.1f);
@@ -155,19 +168,30 @@ public class SeaObstacle : MonoBehaviour
             GameManager.Instance.GameOver("Caught by a shark");
     }
 
-    private void ConfigureSingleTileCoralCollider()
+    private void ConfigureSingleTileCollider()
     {
         BoxCollider tileCollider = GetComponent<BoxCollider>();
         if (tileCollider == null) tileCollider = gameObject.AddComponent<BoxCollider>();
 
-        // Disable imported mesh/child colliders: their renderer-sized bounds can
-        // spill into neighbouring lanes even when the coral is placed on one tile.
+        // Only this root collider participates in gameplay. Visual child
+        // colliders are disabled because imported bounds may span several tiles.
         foreach (Collider collider in GetComponentsInChildren<Collider>(true))
             collider.enabled = collider == tileCollider;
 
+        Vector3 scale = transform.lossyScale;
+        float inverseX = 1f / Mathf.Max(.001f, Mathf.Abs(scale.x));
+        float inverseY = 1f / Mathf.Max(.001f, Mathf.Abs(scale.y));
+        float inverseZ = 1f / Mathf.Max(.001f, Mathf.Abs(scale.z));
+        // Keep the physics footprint comfortably inside one grid tile. This
+        // leaves a clear gap to both neighbouring lanes even while the model sways.
+        float worldFootprint = type == SeaObstacleType.Shark ? .55f : .46f;
+
         tileCollider.isTrigger = false;
-        tileCollider.center = new Vector3(0f, 0.22f, 0f);
-        tileCollider.size = new Vector3(0.70f, 1.35f, 0.70f);
+        tileCollider.center = new Vector3(0f, .42f * inverseY, 0f);
+        tileCollider.size = new Vector3(
+            worldFootprint * inverseX,
+            1.25f * inverseY,
+            worldFootprint * inverseZ);
         tileCollider.enabled = true;
     }
 

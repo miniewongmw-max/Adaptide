@@ -184,7 +184,6 @@ public class MainMenuBehaviour : MonoBehaviour
         WireButton(ComponentAt<Button>(aboutPanel != null ? aboutPanel.transform : null, "ABOUT Close"), () => SetAboutVisible(false));
         WireSlider(bgmSlider, value => { GameAudioManager.SetBgmVolume(value); RefreshAll(); });
         WireSlider(sfxSlider, value => { GameAudioManager.SetSfxVolume(value); RefreshAll(); });
-        ApplyEditableVisualTheme(root);
         SetAboutVisible(false);
 
         AdaptiveUILayout adaptive = root.GetComponent<AdaptiveUILayout>();
@@ -846,7 +845,7 @@ public class MainMenuBehaviour : MonoBehaviour
             string iconName = i == 0 ? "Ready Character Icon" : "Ready Power " + i;
             readyEquipmentIcons[i] = ComponentAt<Image>(playPage, iconName);
             if (readyEquipmentIcons[i] == null)
-                readyEquipmentIcons[i] = CreateReadyEquipmentIcon(playPage, i);
+                Debug.LogError("Editable Canvas is missing " + iconName + ". Re-bake the Gameplay Canvas.");
         }
     }
 
@@ -882,7 +881,9 @@ public class MainMenuBehaviour : MonoBehaviour
             TMP_Text label = ComponentAt<TMP_Text>(icon.transform, "Equipment Label");
             if (label != null)
             {
-                label.gameObject.SetActive(sprite == null);
+                UI3DModelPreview modelPreview = icon.GetComponent<UI3DModelPreview>();
+                bool has3DModel = modelPreview != null && modelPreview.modelPrefab != null;
+                label.gameObject.SetActive(sprite == null && !has3DModel);
                 label.text = i == 0 ? labels[i] : labels[i] + " x" + GameSession.PowerUpCount(i - 1);
             }
         }

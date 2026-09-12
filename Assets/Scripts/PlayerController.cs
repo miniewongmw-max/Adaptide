@@ -13,7 +13,7 @@ public class PlayerController : MonoBehaviour
     public float tileSize = 1f;
     public float moveDuration = 0.12f;
     [Tooltip("Small hop height used to make each tile move readable.")]
-    public float moveHopHeight = 0.18f;
+    public float moveHopHeight = 0.055f;
     public float minX = -4f;
     public float maxX = 4f;
     public MapManager mapManager;
@@ -33,6 +33,8 @@ public class PlayerController : MonoBehaviour
 
     private void Start()
     {
+        // Keep imported turtle models grounded; this is intentionally only a tiny visual lift.
+        moveHopHeight = Mathf.Min(moveHopHeight, .055f);
         furthestScoredZ = transform.position.z;
         cameraController = FindAnyObjectByType<CameraController>();
         RefreshCharacter();
@@ -143,11 +145,12 @@ public class PlayerController : MonoBehaviour
 
     private SeaObstacle FindObstacle(Vector3 futurePosition)
     {
-        // Coral is a grid blocker. Check its tile directly so its visual shake can
-        // never make a later collision miss or block a neighbouring tile.
+        // Stationary tutorial/rest-row obstacles are grid blockers. Check the
+        // root tile rather than imported collider bounds, which may extend into
+        // neighbouring lanes.
         foreach (SeaObstacle candidate in FindObjectsByType<SeaObstacle>())
         {
-            if (candidate.type != SeaObstacleType.Coral || !candidate.isActiveAndEnabled) continue;
+            if (!candidate.isActiveAndEnabled || candidate.GetComponent<MovingSeaObstacle>() != null) continue;
             Vector3 delta = candidate.transform.position - futurePosition;
             if (Mathf.Abs(delta.x) <= tileSize * 0.42f && Mathf.Abs(delta.z) <= tileSize * 0.42f)
                 return candidate;
@@ -161,7 +164,9 @@ public class PlayerController : MonoBehaviour
         {
             if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
             SeaObstacle obstacle = hit.GetComponentInParent<SeaObstacle>();
-            if (obstacle != null) return obstacle;
+            // Static obstacles were handled by their exact grid coordinate
+            // above. Only moving traffic uses live physics overlap here.
+            if (obstacle != null && obstacle.GetComponent<MovingSeaObstacle>() != null) return obstacle;
         }
         return null;
     }
