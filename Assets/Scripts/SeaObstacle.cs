@@ -69,6 +69,15 @@ public class SeaObstacle : MonoBehaviour
         }
         GameAudioManager.Play(GameSfx.Obstacle);
         GameManager.Instance.NotifyObstacleEncountered(type);
+
+        // Pufferfish is a permanent moving wall: it is never consumed and no
+        // protection power allows the player to move through its body.
+        if (type == SeaObstacleType.Pufferfish)
+        {
+            GameManager.Instance.ShowStatus("PUFFER BLOCK! WAIT OR CHOOSE ANOTHER LANE", 1.1f);
+            return true;
+        }
+
         if (GameManager.Instance.IsInvincible || GameManager.Instance.TryUseShield())
         {
             Collider[] colliders = GetComponentsInChildren<Collider>(true);
@@ -81,7 +90,13 @@ public class SeaObstacle : MonoBehaviour
 
             // Sharks are living traffic, so a protected collision lets the player
             // pass but never removes the shark from its lane.
-            if (type == SeaObstacleType.Shark)
+            if (type == SeaObstacleType.Shark && GameSession.Mode == FishGameMode.Tutorial)
+            {
+                GameManager.Instance.NotifyTutorialInvincibleSharkHit();
+                gameObject.SetActive(false);
+                Destroy(gameObject);
+            }
+            else if (type == SeaObstacleType.Shark)
                 StartCoroutine(RestoreCollision(colliders, colliderStates, 0.75f));
             else
                 Destroy(gameObject, 0.45f);
@@ -96,11 +111,8 @@ public class SeaObstacle : MonoBehaviour
             case SeaObstacleType.Squid:
                 GameManager.Instance.ShowInkCloud();
                 if (GameSession.Mode == FishGameMode.Tutorial)
-                {
                     Destroy(gameObject, .35f);
-                    return false;
-                }
-                return true;
+                return false;
             case SeaObstacleType.Crab:
                 GameManager.Instance.BeginCrabEscape(player, this);
                 return true;
@@ -108,14 +120,8 @@ public class SeaObstacle : MonoBehaviour
                 player.Stun(1.25f);
                 GameManager.Instance.ShowStatus("ZAP! STUNNED", 1.25f);
                 if (GameSession.Mode == FishGameMode.Tutorial)
-                {
                     Destroy(gameObject, .35f);
-                    return false;
-                }
-                return true;
-            case SeaObstacleType.Pufferfish:
-                GameManager.Instance.ShowStatus("PUFFER BLOCK! FIND ANOTHER WAY", 1.1f);
-                return true;
+                return false;
             case SeaObstacleType.Shark:
                 if (GameManager.Instance.RetryTutorialSharkLesson()) return true;
                 if (!sharkBiting) StartCoroutine(SharkBite(player));
@@ -211,6 +217,8 @@ public class SeaObstacle : MonoBehaviour
         PlayerController hitPlayer = other.GetComponentInParent<PlayerController>();
         if (hitPlayer == null) return;
         nextMovingHitTime = Time.time + 0.75f;
-        Interact(hitPlayer);
+        bool blocked = Interact(hitPlayer);
+        if (blocked && type == SeaObstacleType.Pufferfish)
+            hitPlayer.BlockCurrentMove();
     }
 }

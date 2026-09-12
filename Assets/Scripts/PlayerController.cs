@@ -24,6 +24,7 @@ public class PlayerController : MonoBehaviour
     public float obstacleCheckRadius = 0.3f;
 
     private bool isMoving;
+    private bool movingObstacleBlocked;
     private bool inputLocked;
     private float stunnedUntil;
     private float nextMagnetScan;
@@ -86,6 +87,13 @@ public class PlayerController : MonoBehaviour
         moveQueue.Clear();
     }
 
+    public void BlockCurrentMove()
+    {
+        if (!isMoving) return;
+        movingObstacleBlocked = true;
+        moveQueue.Clear();
+    }
+
     private IEnumerator MovePlayer()
     {
         isMoving = true;
@@ -112,6 +120,8 @@ public class PlayerController : MonoBehaviour
             Quaternion startRotation = transform.rotation;
             Quaternion targetRotation = Quaternion.LookRotation(direction, Vector3.up);
             float timer = 0f;
+            bool cancelledByTraffic = false;
+            movingObstacleBlocked = false;
             while (timer < moveDuration)
             {
                 if (GameManager.Instance == null || GameManager.Instance.gameOver || inputLocked)
@@ -120,6 +130,14 @@ public class PlayerController : MonoBehaviour
                     isMoving = false;
                     yield break;
                 }
+                if (movingObstacleBlocked)
+                {
+                    transform.position = start;
+                    transform.rotation = startRotation;
+                    movingObstacleBlocked = false;
+                    cancelledByTraffic = true;
+                    break;
+                }
                 timer += Time.deltaTime;
                 float t = Mathf.Clamp01(timer / moveDuration);
                 float eased = 1f - Mathf.Pow(1f - t, 3f);
@@ -127,6 +145,7 @@ public class PlayerController : MonoBehaviour
                 transform.rotation = Quaternion.Slerp(startRotation, targetRotation, eased);
                 yield return null;
             }
+            if (cancelledByTraffic) continue;
             transform.position = target;
             transform.rotation = targetRotation;
             GameAudioManager.Play(GameSfx.Move);
@@ -159,7 +178,10 @@ public class PlayerController : MonoBehaviour
         Vector3 checkPosition = futurePosition + Vector3.up * 0.75f;
         Vector3 halfExtents = new Vector3(0.4f, 0.75f, 0.4f);
         int mask = obstacleLayer.value == 0 ? Physics.AllLayers : obstacleLayer.value;
-        Collider[] hits = Physics.OverlapBox(checkPosition, halfExtents, Quaternion.identity, mask, QueryTriggerInteraction.Ignore);
+        // Moving traffic uses trigger colliders so it can detect a stationary
+        // player. Include those triggers in the destination-tile check, then
+        // filter below to SeaObstacle only.
+        Collider[] hits = Physics.OverlapBox(checkPosition, halfExtents, Quaternion.identity, mask, QueryTriggerInteraction.Collide);
         foreach (Collider hit in hits)
         {
             if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;

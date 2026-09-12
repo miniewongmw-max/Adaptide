@@ -70,6 +70,7 @@ public class GameManager : MonoBehaviour
     private MapManager tutorialMap;
     private TutorialLesson tutorialLesson;
     private bool tutorialPowerCollected;
+    private bool tutorialInvincibleSharkHit;
     private int tutorialDashForwardMoves;
     private float tutorialDashStartZ;
 
@@ -145,7 +146,9 @@ public class GameManager : MonoBehaviour
         OceanUI.SetRect(bestScoreText.rectTransform, new Vector2(0.67f, 0.855f), new Vector2(0.975f, 0.90f), Vector2.zero, Vector2.zero);
         timerText = OceanUI.CreateText("", root, 28f, OceanUI.Coral, TextAlignmentOptions.Right);
         timerText.name = "Timer Text";
-        OceanUI.SetRect(timerText.rectTransform, new Vector2(0.67f, 0.81f), new Vector2(0.975f, 0.855f), Vector2.zero, Vector2.zero);
+        timerText.fontSize = 52f;
+        timerText.alignment = TextAlignmentOptions.Left;
+        OceanUI.SetRect(timerText.rectTransform, new Vector2(.025f, .815f), new Vector2(.43f, .89f), Vector2.zero, Vector2.zero);
 
         pauseButton = OceanUI.CreateButton("Pause", "II", root, Color.clear, TogglePause);
         TMP_Text pauseLabel = pauseButton.GetComponentInChildren<TMP_Text>();
@@ -502,9 +505,13 @@ public class GameManager : MonoBehaviour
         }
 
         if (tutorialPowerCollected && player != null &&
-            (tutorialLesson == TutorialLesson.BubbleShield ||
-             tutorialLesson == TutorialLesson.Invincibility) &&
-            player.position.z >= tutorialTargetZ - 0.1f)
+            tutorialLesson == TutorialLesson.BubbleShield &&
+            player.position.z >= tutorialTargetZ - .1f)
+            AdvanceTutorial();
+
+        if (tutorialPowerCollected && tutorialInvincibleSharkHit && player != null &&
+            tutorialLesson == TutorialLesson.Invincibility &&
+            player.position.z >= tutorialTargetZ + .9f)
             AdvanceTutorial();
     }
 
@@ -624,12 +631,22 @@ public class GameManager : MonoBehaviour
                 ShowStatus("FOLLOW THE PEARL TRAIL - COLLECT IT BEFORE CONTINUING", 2.5f);
                 break;
             case 3:
+                tutorialInvincibleSharkHit = false;
                 tutorialTargetZ = nextZ;
                 tutorialMap?.SpawnTutorialObstacleLine(SeaObstacleType.Shark, nextZ);
-                SetTutorialObjective("USE INVINCIBILITY TO CROSS THE SHARK WALL");
-                ShowStatus("MOVE THROUGH THE SHARK WALL WHILE INVINCIBLE", 2.5f);
+                SetTutorialObjective("USE INVINCIBILITY ON A SHARK");
+                ShowStatus("HIT ONE SHARK WHILE INVINCIBLE", 2.5f);
                 break;
         }
+    }
+
+    public void NotifyTutorialInvincibleSharkHit()
+    {
+        if (GameSession.Mode != FishGameMode.Tutorial ||
+            tutorialLesson != TutorialLesson.Invincibility || !tutorialPowerCollected) return;
+        tutorialInvincibleSharkHit = true;
+        SetTutorialObjective("SHARK CLEARED - MOVE FORWARD ONE MORE ROW");
+        ShowStatus("INVINCIBILITY CLEARED THE SHARK! KEEP GOING", 2f);
     }
 
     public bool RetryTutorialSharkLesson()

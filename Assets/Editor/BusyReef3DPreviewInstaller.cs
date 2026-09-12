@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using TMPro;
 
 public static class BusyReef3DPreviewInstaller
 {
@@ -47,6 +48,7 @@ public static class BusyReef3DPreviewInstaller
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode) return;
             if (SceneManager.GetActiveScene().path != GameplayScene) return;
+            ApplyTimeAttackTimerLayoutIfLegacy();
             Transform ready = FindFirst("Ready Character Icon");
             if (ready == null || ready.GetComponent<UI3DModelPreview>() != null) return;
             Install();
@@ -59,9 +61,31 @@ public static class BusyReef3DPreviewInstaller
         EditorApplication.delayCall += () =>
         {
             if (SceneManager.GetActiveScene().path != GameplayScene) return;
+            ApplyTimeAttackTimerLayoutIfLegacy();
             Transform ready = FindFirst("Ready Character Icon");
             if (ready != null && ready.GetComponent<UI3DModelPreview>() == null) Install();
         };
+    }
+
+    private static void ApplyTimeAttackTimerLayoutIfLegacy()
+    {
+        Transform timerTransform = FindFirst("Timer Text");
+        TMP_Text timer = timerTransform != null ? timerTransform.GetComponent<TMP_Text>() : null;
+        RectTransform rect = timerTransform as RectTransform;
+        if (timer == null || rect == null || rect.anchorMin.x < .5f) return;
+
+        Undo.RecordObjects(new Object[] { timer, rect }, "Move Time Attack timer under pearls");
+        rect.anchorMin = new Vector2(.025f, .815f);
+        rect.anchorMax = new Vector2(.43f, .89f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        timer.fontSize = 52f;
+        timer.alignment = TextAlignmentOptions.Left;
+        EditorUtility.SetDirty(timer);
+        EditorUtility.SetDirty(rect);
+        Scene scene = SceneManager.GetActiveScene();
+        EditorSceneManager.MarkSceneDirty(scene);
+        EditorSceneManager.SaveScene(scene);
     }
 
     private static void AddSlots(string objectName, Vector2 anchorMin, Vector2 anchorMax)

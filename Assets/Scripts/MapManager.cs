@@ -48,11 +48,21 @@ public class MapManager : MonoBehaviour
     [Tooltip("Assign four visual-only 3D decoration prefabs. They spawn randomly outside lanes -4 to 4.")]
     public GameObject[] sideDecorationPrefabs = new GameObject[4];
     [Range(0f, 1f)]
-    public float sideDecorationChance = .32f;
+    public float sideDecorationChance = .48f;
     [Tooltip("Random scale range applied to each side decoration.")]
     public Vector2 sideDecorationScaleRange = new Vector2(.82f, 1.18f);
     [Tooltip("Visible bottom height above the side border tile.")]
     public float sideDecorationSurfaceHeight = .5f;
+
+    [Header("Alternating Ground Rows")]
+    public bool useAlternatingRowTint = true;
+    [Range(.75f, 1f)]
+    [Tooltip("Brightness used on every second row. Keep near 1 for a subtle line highlight.")]
+    public float deeperRowBrightness = .90f;
+    [Tooltip("Third ground colour used specifically for non-tutorial coral rows.")]
+    public Color coralRowBlue = new Color32(72, 142, 184, 255);
+    [Range(0f, 1f)]
+    public float coralRowBlueStrength = .42f;
 
     [Header("Legacy Prefab Fallbacks")]
     [Tooltip("Kept so existing scene assignments continue working. New artwork should use the named slots above.")]
@@ -203,6 +213,7 @@ public class MapManager : MonoBehaviour
 
                 tile.transform.localPosition =
                     new Vector3(xPosition, 0f, 0f);
+                ApplyTileRowTint(tile, rowZ);
             }
 
             // Always provide one unreachable visual lane on both sides. These
@@ -392,6 +403,7 @@ public class MapManager : MonoBehaviour
             oldestRow.position =
                 new Vector3(0f, 0f, nextRowZ);
 
+            RefreshRowTileTint(oldestRow);
             RefreshObstacles(oldestRow);
             RefreshCollectibles(oldestRow);
             RefreshSideDecorations(oldestRow);
@@ -467,11 +479,77 @@ public class MapManager : MonoBehaviour
         GameObject tile = Instantiate(borderTilePrefab, row);
         tile.name = laneX < 0f ? "Left Decoration Border" : "Right Decoration Border";
         tile.transform.localPosition = new Vector3(laneX, 0f, 0f);
+        ApplyTileRowTint(tile, row.position.z);
+    }
+
+    private void RefreshRowTileTint(Transform row)
+    {
+        foreach (Transform child in row)
+        {
+            if (child.name.StartsWith("Obstacles") ||
+                child.name.StartsWith("Collectibles") ||
+                child.name.StartsWith("Side Decorations")) continue;
+            ApplyTileRowTint(child.gameObject, row.position.z);
+        }
+    }
+
+    private void ApplyTileRowTint(GameObject tile, float rowZ)
+    {
+        if (tile == null) return;
+        bool deeper = useAlternatingRowTint && Mathf.Abs(Mathf.RoundToInt(rowZ)) % 2 == 1;
+        float brightness = deeper ? deeperRowBrightness : 1f;
+        foreach (Renderer renderer in tile.GetComponentsInChildren<Renderer>(true))
+        {
+            Material material = renderer.sharedMaterial;
+            if (material == null) continue;
+            MaterialPropertyBlock properties = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(properties);
+            if (material.HasProperty("_BaseColor"))
+            {
+                Color original = material.GetColor("_BaseColor");
+                properties.SetColor("_BaseColor", new Color(
+                    original.r * brightness, original.g * brightness,
+                    original.b * brightness, original.a));
+            }
+            if (material.HasProperty("_Color"))
+            {
+                Color original = material.GetColor("_Color");
+                properties.SetColor("_Color", new Color(
+                    original.r * brightness, original.g * brightness,
+                    original.b * brightness, original.a));
+            }
+            renderer.SetPropertyBlock(properties);
+        }
+    }
+
+    private void ApplyCoralRowTint(Transform row)
+    {
+        if (row == null || GameSession.Mode == FishGameMode.Tutorial) return;
+        foreach (Transform child in row)
+        {
+            if (child.name.StartsWith("Obstacles") ||
+                child.name.StartsWith("Collectibles") ||
+                child.name.StartsWith("Side Decorations")) continue;
+            foreach (Renderer renderer in child.GetComponentsInChildren<Renderer>(true))
+            {
+                Material material = renderer.sharedMaterial;
+                if (material == null) continue;
+                MaterialPropertyBlock properties = new MaterialPropertyBlock();
+                renderer.GetPropertyBlock(properties);
+                if (material.HasProperty("_BaseColor"))
+                    properties.SetColor("_BaseColor",
+                        Color.Lerp(material.GetColor("_BaseColor"), coralRowBlue, coralRowBlueStrength));
+                if (material.HasProperty("_Color"))
+                    properties.SetColor("_Color",
+                        Color.Lerp(material.GetColor("_Color"), coralRowBlue, coralRowBlueStrength));
+                renderer.SetPropertyBlock(properties);
+            }
+        }
     }
 
     private void SpawnSideDecorations(Transform container)
     {
-        if (container == null || sideDecorationPrefabs == null || sideDecorationPrefabs.Length == 0) return;
+        if (container == null) return;
         TrySpawnSideDecoration(container, -5f);
         TrySpawnSideDecoration(container, 5f);
     }
@@ -479,13 +557,16 @@ public class MapManager : MonoBehaviour
     private void TrySpawnSideDecoration(Transform container, float laneX)
     {
         if (Random.value > sideDecorationChance) return;
-        List<GameObject> available = new List<GameObject>();
-        foreach (GameObject prefab in sideDecorationPrefabs)
-            if (prefab != null) available.Add(prefab);
-        if (available.Count == 0) return;
-
-        GameObject decoration = Instantiate(available[Random.Range(0, available.Count)], container);
-        decoration.name = "Side Decoration";
+        int decorationType = Random.Range(0, 4);
+        GameObject assignedPrefab = sideDecorationPrefabs != null && decorationType < sideDecorationPrefabs.Length
+            ? sideDecorationPrefabs[decorationType]
+            : null;
+        GameObject decoration = assignedPrefab != null
+            ? Instantiate(assignedPrefab, container)
+            : CreatePlaceholderDecoration(container, decorationType);
+        decoration.name = assignedPrefab != null
+            ? "Side Decoration Type " + (decorationType + 1)
+            : "Side Decoration Type " + (decorationType + 1) + " Placeholder";
         decoration.transform.localPosition = new Vector3(laneX + Random.Range(-.20f, .20f), 0f, Random.Range(-.28f, .28f));
         decoration.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
         float minScale = Mathf.Max(.05f, Mathf.Min(sideDecorationScaleRange.x, sideDecorationScaleRange.y));
@@ -500,6 +581,31 @@ public class MapManager : MonoBehaviour
             body.useGravity = false;
         }
         PrefabGrounding.AlignVisibleBottom(decoration, container, sideDecorationSurfaceHeight);
+    }
+
+    private static GameObject CreatePlaceholderDecoration(Transform parent, int type)
+    {
+        GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.transform.SetParent(parent, false);
+        Vector3[] shapes =
+        {
+            new Vector3(.42f, .42f, .42f),
+            new Vector3(.52f, .32f, .46f),
+            new Vector3(.34f, .58f, .34f),
+            new Vector3(.48f, .40f, .30f)
+        };
+        Color[] colors =
+        {
+            new Color32(255, 143, 190, 255),
+            new Color32(255, 215, 105, 255),
+            new Color32(112, 211, 241, 255),
+            new Color32(72, 142, 184, 255)
+        };
+        int index = Mathf.Clamp(type, 0, 3);
+        cube.transform.localScale = shapes[index];
+        Renderer renderer = cube.GetComponent<Renderer>();
+        if (renderer != null) renderer.material.color = colors[index];
+        return cube;
     }
 
     private void RefreshSideDecorations(Transform row)
@@ -522,14 +628,14 @@ public class MapManager : MonoBehaviour
         if (prefab == null) return;
         int direction = Random.value < .5f ? -1 : 1;
         float hardSpeedInfluence = GameSession.Mode == FishGameMode.Riptide ? 1.12f : 1f;
-        float speed = Random.Range(.30f, .43f) * hardSpeedInfluence;
-        float interval = Random.Range(2.0f, 2.65f);
+        float speed = Random.Range(.46f, .62f) * hardSpeedInfluence;
+        float interval = Random.Range(2.5f, 3.3f);
         int schoolSize = Random.Range(2, 4);
-        float wavePause = tutorial ? 6.5f : Random.Range(4.5f, 6.5f);
+        float wavePause = tutorial ? 9f : Random.Range(8f, 11f);
         AnimalTrafficLane lane = obstacleContainer.gameObject.AddComponent<AnimalTrafficLane>();
         lane.Configure(prefab, SeaObstacleType.Pufferfish, direction, speed, interval,
             animalOffscreenDistance, obstacleHeight,
-            GetNamedObstaclePrefab(SeaObstacleType.Pufferfish) == null, schoolSize, wavePause);
+            GetNamedObstaclePrefab(SeaObstacleType.Pufferfish) == null, schoolSize, wavePause, tutorial);
     }
 
     private void SpawnCoralRestRow(Transform obstacleContainer)
@@ -540,9 +646,17 @@ public class MapManager : MonoBehaviour
             ? SeaObstacleType.Coral
             : SeaObstacleType.Crab;
 
-        int obstacleCount = staticType == SeaObstacleType.Crab
-            ? 1
-            : Random.Range(1, maximumObstaclesPerRow + 1);
+        if (staticType == SeaObstacleType.Coral)
+            ApplyCoralRowTint(obstacleContainer.parent);
+
+        int obstacleCount;
+        if (staticType == SeaObstacleType.Crab) obstacleCount = 1;
+        else
+        {
+            int minimumCoral = GameSession.Mode == FishGameMode.Riptide ? 4 : 3;
+            int maximumCoral = GameSession.Mode == FishGameMode.Riptide ? 6 : 5;
+            obstacleCount = Random.Range(minimumCoral, maximumCoral + 1);
+        }
 
         List<int> lanes = new List<int>();
         for (int x = -4; x <= 4; x++) lanes.Add(x);
@@ -574,9 +688,9 @@ public class MapManager : MonoBehaviour
         // Crab remains stationary. Pufferfish receives special slower lane
         // timing after it is selected here.
         float roll = Random.value;
-        if (roll < 0.32f) return SeaObstacleType.Squid;
-        if (roll < 0.62f) return SeaObstacleType.Jellyfish;
-        if (roll < 0.82f) return SeaObstacleType.Pufferfish;
+        if (roll < 0.36f) return SeaObstacleType.Squid;
+        if (roll < 0.70f) return SeaObstacleType.Jellyfish;
+        if (roll < 0.80f) return SeaObstacleType.Pufferfish;
         return SeaObstacleType.Shark;
     }
 
@@ -672,7 +786,7 @@ public class MapManager : MonoBehaviour
     void CreateBonusCollectible(Transform container, List<int> freeLanes, CollectibleKind kind)
     {
         int lane = freeLanes[Random.Range(0, freeLanes.Count)];
-        SpawnCollectiblePrefab(kind, container, lane, collectibleHeight + 0.2f);
+        SpawnCollectiblePrefab(kind, container, lane, collectibleHeight + .03f);
     }
 
     private GameObject SpawnObstaclePrefab(SeaObstacleType type, Transform container)
@@ -736,7 +850,24 @@ public class MapManager : MonoBehaviour
             trigger.radius = 0.48f;
         }
         PrefabGrounding.AlignVisibleBottom(collectible, container, height);
+        ConfigureCollectibleTrigger(collectible, container, lane);
         return collectible;
+    }
+
+    private static void ConfigureCollectibleTrigger(GameObject collectible, Transform container, int lane)
+    {
+        SphereCollider pickup = collectible.GetComponent<SphereCollider>();
+        if (pickup == null) pickup = collectible.AddComponent<SphereCollider>();
+        foreach (Collider collider in collectible.GetComponentsInChildren<Collider>(true))
+            collider.enabled = collider == pickup;
+
+        pickup.isTrigger = true;
+        Vector3 pickupWorldPosition = container.TransformPoint(new Vector3(lane, .58f, 0f));
+        pickup.center = collectible.transform.InverseTransformPoint(pickupWorldPosition);
+        Vector3 scale = collectible.transform.lossyScale;
+        float largestScale = Mathf.Max(.001f, Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+        pickup.radius = .52f / largestScale;
+        pickup.enabled = true;
     }
 
     private GameObject GetCollectiblePrefab(CollectibleKind kind)

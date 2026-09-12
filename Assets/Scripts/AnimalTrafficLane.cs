@@ -27,7 +27,7 @@ public class AnimalTrafficLane : MonoBehaviour
 
     public void Configure(GameObject prefab, SeaObstacleType type, int travelDirection,
         float laneSpeed, float interval, float distance, float height, bool tintFallback,
-        int waveSize, float wavePause)
+        int waveSize, float wavePause, bool startVisible = false)
     {
         animalPrefab = prefab;
         animalType = type;
@@ -47,7 +47,10 @@ public class AnimalTrafficLane : MonoBehaviour
         {
             float travelled = i * spacing;
             if (travelled > offscreenDistance * 1.7f) break;
-            SpawnAnimal(StartX() + direction * travelled);
+            float startingX = startVisible
+                ? (direction > 0 ? -3.6f : 3.6f) + direction * i * 1.35f
+                : StartX() + direction * travelled;
+            SpawnAnimal(startingX);
         }
         // The prewarmed animals are the first complete school/wave. Wait before
         // beginning the next one instead of immediately adding extra animals.
