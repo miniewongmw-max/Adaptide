@@ -19,10 +19,10 @@ public class GameAudioManager : MonoBehaviour
 
     public static GameAudioManager Instance { get; private set; }
 
-    [Header("Background Music - assign later")]
+    [Header("Background Music")]
     public AudioClip backgroundMusic;
 
-    [Header("Sound Effects - assign later")]
+    [Header("Sound Effects")]
     public AudioClip buttonClick;
     public AudioClip playerMove;
     public AudioClip pearlCollected;
@@ -42,6 +42,10 @@ public class GameAudioManager : MonoBehaviour
     {
         if (Instance != null && Instance != this)
         {
+            // A manager from an earlier scene can exist without any clips.
+            // Transfer this scene's assignments before discarding its duplicate.
+            Instance.CopyAssignedClipsFrom(this);
+            Instance.ApplyVolumes();
             Destroy(gameObject);
             return;
         }
@@ -50,6 +54,17 @@ public class GameAudioManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         EnsureSources();
         ApplyVolumes();
+    }
+
+    private void CopyAssignedClipsFrom(GameAudioManager other)
+    {
+        if (other.backgroundMusic != null) backgroundMusic = other.backgroundMusic;
+        if (other.buttonClick != null) buttonClick = other.buttonClick;
+        if (other.playerMove != null) playerMove = other.playerMove;
+        if (other.pearlCollected != null) pearlCollected = other.pearlCollected;
+        if (other.obstacleHit != null) obstacleHit = other.obstacleHit;
+        if (other.powerUpCollected != null) powerUpCollected = other.powerUpCollected;
+        if (other.gameOver != null) gameOver = other.gameOver;
     }
 
     public static GameAudioManager EnsureInstance()
@@ -102,24 +117,40 @@ public class GameAudioManager : MonoBehaviour
         if (musicSource == null)
         {
             musicSource = gameObject.AddComponent<AudioSource>();
-            musicSource.playOnAwake = false;
-            musicSource.loop = true;
         }
         if (sfxSource == null)
         {
             sfxSource = gameObject.AddComponent<AudioSource>();
-            sfxSource.playOnAwake = false;
         }
+        musicSource.playOnAwake = false;
+        musicSource.loop = true;
+        musicSource.spatialBlend = 0f;
+        sfxSource.playOnAwake = false;
+        sfxSource.spatialBlend = 0f;
     }
 
     private void ApplyVolumes()
     {
         EnsureSources();
+        LoadMissingClips();
         float mute = Muted ? 0f : 1f;
         musicSource.volume = BgmVolume * mute;
         sfxSource.volume = SfxVolume * mute;
         if (backgroundMusic == null) return;
         if (musicSource.clip != backgroundMusic) musicSource.clip = backgroundMusic;
         if (!musicSource.isPlaying) musicSource.Play();
+    }
+
+    private void LoadMissingClips()
+    {
+        // Also works when an already-open scene has not refreshed its serialized
+        // clip references, or an audio manager was created before Gameplay loaded.
+        if (backgroundMusic == null) backgroundMusic = Resources.Load<AudioClip>("GameAudio/BGM");
+        if (buttonClick == null) buttonClick = Resources.Load<AudioClip>("GameAudio/ButtonClick");
+        if (playerMove == null) playerMove = Resources.Load<AudioClip>("GameAudio/PlayerMove");
+        if (pearlCollected == null) pearlCollected = Resources.Load<AudioClip>("GameAudio/PearlCollected");
+        if (obstacleHit == null) obstacleHit = Resources.Load<AudioClip>("GameAudio/ObstacleHit");
+        if (powerUpCollected == null) powerUpCollected = Resources.Load<AudioClip>("GameAudio/PowerUpCollected");
+        if (gameOver == null) gameOver = Resources.Load<AudioClip>("GameAudio/GameOver");
     }
 }
