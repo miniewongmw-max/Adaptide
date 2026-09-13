@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 2286908130400614376}
   - component: {fileID: 688975889922513810}
-  - component: {fileID: 7226993105795256476}
   m_Layer: 6
   m_Name: Coral2
   m_TagString: Untagged
@@ -49,25 +48,12 @@ BoxCollider:
     serializedVersion: 2
     m_Bits: 0
   m_LayerOverridePriority: 0
-  m_IsTrigger: 0
+  m_IsTrigger: 1
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1, y: 1.5, z: 0.98235583}
-  m_Center: {x: 0, y: 0.20612365, z: 0.008822098}
---- !u!114 &7226993105795256476
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1671162218962871013}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 400566d43dc6e444b9a4930a615dd54e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaObstacle
-  type: 0
+  m_Size: {x: 1, y: 1.316988, z: 0.98235583}
+  m_Center: {x: 0, y: -0.295946, z: 0.0088220835}
 --- !u!1001 &8248114043916006254
 PrefabInstance:
   m_ObjectHideFlags: 0
